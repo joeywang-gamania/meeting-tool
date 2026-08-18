@@ -76,22 +76,31 @@
     var fullTranscript = "";
     var currentMimeType = "audio/webm";
     document.addEventListener("DOMContentLoaded", function () {
+      // 初始化：透過 POST 向 GAS 索取配置 (帶入精準除錯機制)
       fetch(GAS_API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({ action: "getConfig" })
       })
-      .then(function(res) { return res.json(); })
+      .then(function(res) { 
+        return res.json(); 
+      })
       .then(function(data) {
-        if (data.success) {
+        if (data.success && data.apiKey) {
           apiKey = data.apiKey;
           glossaryStr = data.glossary ? data.glossary.join(", ") : "";
+          console.log("✅ 成功同步 GAS 系統配置與 API Key");
+        } else if (data.success && !data.apiKey) {
+          console.error("❌ 後端連線成功，但 GEMINI_API_KEY 未設定：", data);
+          alert("🛑 後端連線成功，但未設定 GEMINI_API_KEY！\n\n請至 GAS 編輯器『專案設定 ⚙️』->『指令碼屬性』新增 GEMINI_API_KEY。");
         } else {
-          console.error("❌ 無法取得配置：", data.msg);
+          console.error("❌ 後端回傳異常：", data.msg);
+          alert("🛑 後端 API 回傳錯誤：" + (data.msg || "未知錯誤"));
         }
       })
       .catch(function(err) {
-        console.error("❌ 網路請求失敗：", err);
+        console.error("❌ 網路或 CORS 請求失敗：", err);
+        alert("🛑 無法連線至 GAS API！請確認：\n1. GAS 部署之『誰有存取權』已設為『所有人 (Anyone)』\n2. 修改程式碼後已選擇『新版本』重新部署");
       });
     });
     function getSupportedMimeType() {
