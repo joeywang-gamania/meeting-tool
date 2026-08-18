@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎙️ 會議即時翻譯與紀錄</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #070b14; color: #e2e8f0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .bg-navy-card { background-color: #121b30; }
+    .border-navy-light { border-color: #22345e; }
+    .pulse-rec { animation: pulseRec 1.5s infinite; }
+    @keyframes pulseRec { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    .transcript-box { height: 55vh; overflow-y: auto; scroll-behavior: smooth; }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+  <div class="max-w-6xl mx-auto space-y-5">
+    <div class="flex justify-between items-center bg-navy-card p-4 md:p-5 rounded-xl border border-navy-light shadow-lg">
+      <div>
+        <h1 class="text-xl md:text-2xl font-bold text-blue-100 flex items-center gap-2">
+          <span>🎙️</span> 會議即時翻譯與紀錄
+        </h1>
+        <p class="text-xs text-gray-400 mt-1">麥克風環境收音 / 韓文中譯 / 英文術語保留 / 雙向發話識別</p>
+      </div>
+      <a id="btn-return" 
+         href="https://script.google.com/a/macros/gamania.com/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec" 
+         target="_top" 
+         class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs md:text-sm font-bold text-white transition border border-slate-600 shadow-md active:scale-95 flex items-center gap-1 cursor-pointer">
+        <span>↩</span> 返回專案追蹤
+      </a>
+    </div>
+    <div class="flex gap-4">
+      <button id="btn-start" onclick="startMeeting()" class="flex-1 py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-green-900/40 active:scale-98 cursor-pointer">
+        ▶️ 開始收音
+      </button>
+      <button id="btn-stop" onclick="stopMeeting()" disabled class="flex-1 py-3.5 bg-red-950/40 text-gray-500 font-bold rounded-xl text-base md:text-lg transition border border-red-900/30 cursor-not-allowed">
+        ⏹️ 結束並生成紀錄
+      </button>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div class="lg:col-span-2 bg-navy-card rounded-xl border border-navy-light flex flex-col shadow-xl overflow-hidden">
+        <div class="bg-blue-900/30 px-4 py-3 border-b border-navy-light flex justify-between items-center">
+          <span class="font-bold text-blue-200 text-sm flex items-center gap-2">
+            <span>💬</span> 即時翻譯逐字稿
+          </span>
+          <span id="rec-indicator" class="hidden text-xs font-bold text-red-400 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 bg-red-500 rounded-full pulse-rec"></span> 收音分析中...
+          </span>
+        </div>
+        <div id="transcript-container" class="transcript-box p-4 space-y-3 text-xs md:text-sm text-gray-300">
+          <div id="empty-placeholder" class="text-center text-gray-500 pt-16 font-medium">
+            點擊「開始收音」啟動即時聽寫與 AI 翻譯...
+          </div>
+        </div>
+      </div>
+      <div class="bg-navy-card rounded-xl border border-navy-light flex flex-col shadow-xl overflow-hidden">
+        <div class="bg-yellow-900/30 px-4 py-3 border-b border-navy-light">
+          <span class="font-bold text-yellow-400 text-sm flex items-center gap-2">
+            <span>📝</span> 即時擷取待辦
+          </span>
+        </div>
+        <div id="tasks-container" class="p-4 space-y-3 text-xs flex-1 overflow-y-auto">
+          <div class="text-center text-gray-500 pt-16">會議結束後，AI 將自動彙整關鍵待辦與執行單位...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var GAS_API_URL = "https://github.com/joeywang-gamania/eeting-tool.git";
+    var mediaRecorder = null;
+    var isRecording = false;
+    var apiKey = "";
+    var glossaryStr = "";
+    var fullTranscript = "";
+    var currentMimeType = "audio/webm";
+    document.addEventListener("DOMContentLoaded", function () {
+      fetch(GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "getConfig" })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.success) {
+          apiKey = data.apiKey;
+          glossaryStr = data.glossary ? data.glossary.join(", ") : "";
+        } else {
+          console.error("❌ 無法取得配置：", data.msg);
+        }
+      })
+      .catch(function(err) {
+        console.error("❌ 網路請求失敗：", err);
+      });
+    });
+    function getSupportedMimeType() {
+      var types = ["audio/webm", "audio/mp4", "audio/ogg", "audio/wav", "audio/aac"];
+      for (var i = 0; i < types.length; i++) {
+        if (MediaRecorder.isTypeSupported(types[i])) return types[i];
+      }
+      return "";
+    }
+    function resetStartButton() {
+      var btnStart = document.getElementById("btn-start");
+      if (btnStart) {
+        btnStart.disabled = false;
+        btnStart.innerText = "▶️ 開始收音";
+        btnStart.className = "flex-1 py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-green-900/40 active:scale-98 cursor-pointer";
+      }
+    }
+    function startMeeting() {
+      var btnStart = document.getElementById("btn-start");
+      if (!btnStart) return;
+
+      btnStart.disabled = true;
+      btnStart.innerText = "⏳ 請求麥克風權限中...";
+      btnStart.className = "flex-1 py-3.5 bg-yellow-800 text-yellow-200 font-bold rounded-xl text-base md:text-lg cursor-wait animate-pulse";
+      if (!apiKey) {
+        alert("🛑 系統錯誤：尚未順利取得 Gemini API Key，請稍後重試。");
+        resetStartButton();
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("🛑 當前網域環境未支援 Web Audio API。");
+        resetStartButton();
+        return;
+      }
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then(function (stream) {
+          currentMimeType = getSupportedMimeType();
+          var recorderOptions = currentMimeType ? { mimeType: currentMimeType } : {};
+          mediaRecorder = new MediaRecorder(stream, recorderOptions);
+          btnStart.className = "flex-1 py-3.5 bg-gray-800 text-gray-500 font-bold rounded-xl text-base md:text-lg cursor-not-allowed";
+          btnStart.innerText = "🎙️ 正在收音中...";
+          var btnStop = document.getElementById("btn-stop");
+          if (btnStop) {
+            btnStop.disabled = false;
+            btnStop.className = "flex-1 py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-red-900/40 active:scale-98 cursor-pointer";
+          }
+          var indicator = document.getElementById("rec-indicator");
+          if (indicator) indicator.classList.remove("hidden");
+          var placeholder = document.getElementById("empty-placeholder");
+          if (placeholder) placeholder.remove();
+          mediaRecorder.ondataavailable = function (event) {
+            if (event.data && event.data.size > 0) {
+              processAudioChunk(event.data);
+            }
+          };
+          mediaRecorder.start(15000);
+          isRecording = true;
+        })
+        .catch(function (err) {
+          console.error("麥克風啟動失敗：", err);
+          resetStartButton();
+          alert("🛑 啟動麥克風失敗：" + (err.message || err.toString()) + "\n請確定已允許瀏覽器存取麥克風。");
+        });
+    }
+
+    function processAudioChunk(audioBlob) {
+      var reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = function () {
+        var base64Audio = reader.result.split(",")[1];
+        var prompt = "你是一個專業的中英韓同步口譯員與會議記錄員。\n請分析聲音數據：\n1. 韓文翻譯為繁體中文；中文整理為順暢繁體中文。\n2. 英文專有名詞與代碼請保留原本字串，不要翻譯。\n3. 推測發話方並加上前綴，格式嚴格限定為：[韓方] 或 [我方]：譯文\n4. 參考內部術語對照表校正：" + glossaryStr + "\n5. 若音訊僅有靜音或環境雜音，只回傳 \"EMPTY_AUDIO\"\n6. 只輸出譯文對白，嚴禁額外解釋說明。";
+        var sendMimeType = currentMimeType || "audio/webm";
+        fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: prompt },
+                { inlineData: { mimeType: sendMimeType, data: base64Audio } }
+              ]
+            }],
+            generationConfig: { temperature: 0.1 }
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+            var text = data.candidates[0].content.parts[0].text.trim();
+            if (text !== "EMPTY_AUDIO" && text !== "") {
+              fullTranscript += text + "\n\n";
+              appendTranscriptUI(text);
+            }
+          }
+        })
+        .catch(function(e) {
+          console.error("Gemini API Chunk 傳輸失敗:", e);
+        });
+      };
+    }
+
+    function appendTranscriptUI(text) {
+      var box = document.getElementById("transcript-container");
+      if (!box) return;
+      var lines = text.split("\n").filter(function (l) { return l.trim() !== ""; });
+      lines.forEach(function (line) {
+        var div = document.createElement("div");
+        div.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm";
+        var formatted = line.replace(/^(韓方說|\[韓方\])[，,：:]?\s*/, '<span class="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-bold border border-yellow-500/40 mr-2">[🇰🇷 韓方]</span>')
+                            .replace(/^(我方說|\[我方\])[，,：:]?\s*/, '<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 mr-2">[🇹🇼 我方]</span>');
+        div.innerHTML = formatted;
+        box.appendChild(div);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function stopMeeting() {
+      isRecording = false;
+      if (mediaRecorder && mediaRecorder.stream) {
+        mediaRecorder.stream.getTracks().forEach(function (t) { t.stop(); });
+      }
+      var indicator = document.getElementById("rec-indicator");
+      if (indicator) indicator.classList.add("hidden");
+      var btnStop = document.getElementById("btn-stop");
+      if (btnStop) {
+        btnStop.innerText = "🔄 正在萃取待辦並產出會議紀錄...";
+        btnStop.disabled = true;
+        btnStop.className = "flex-1 py-3.5 bg-yellow-700 text-white font-bold rounded-xl text-base md:text-lg animate-pulse";
+      }
+      extractFinalTasksAndSave();
+    }
+
+    function extractFinalTasksAndSave() {
+      if (!fullTranscript.trim()) {
+        alert("未錄製到有效語音對白，無法生成會議紀錄。");
+        window.location.reload();
+        return;
+      }
+      var prompt = "分析以下會議逐字稿：\n" + fullTranscript + "\n請萃取內容中的「待辦事項與決議」。\n必須且只能輸出標準 JSON 陣列 (JSON Array)，不要有任何 Markdown 包裹符號或解說。\n物件結構：\n[\n  { \"taskName\": \"任務名稱\", \"dueDate\": \"YYYY-MM-DD 或 空字串\", \"unit\": \"執行單位/人員 或 未定\" }\n]";
+      fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.1 }
+        })
+      })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var tasksObj = [];
+        try {
+          var rawText = data.candidates[0].content.parts[0].text.trim();
+          rawText = rawText.replace(/^`{3}(json)?/i, "").replace(/`{3}$/, "").trim();
+          tasksObj = JSON.parse(rawText);
+        } catch (e) {
+          console.error("Task Extraction Json Parse Fail:", e);
+          tasksObj = [];
+        }
+        renderTasksAndSave(tasksObj);
+      })
+      .catch(function (err) {
+        console.error("Gemini 待辦萃取失敗：", err);
+        renderTasksAndSave([]);
+      });
+    }
+
+    function renderTasksAndSave(tasksObj) {
+      var tasksBox = document.getElementById("tasks-container");
+      if (tasksBox) {
+        tasksBox.innerHTML = "";
+        if (!Array.isArray(tasksObj) || tasksObj.length === 0) {
+          tasksBox.innerHTML = '<div class="text-gray-500 text-center py-6">本次會議無明確待辦事項。</div>';
+        } else {
+          tasksObj.forEach(function (t) {
+            var taskDiv = document.createElement("div");
+            taskDiv.className = "bg-yellow-950/40 p-3 rounded-lg border border-yellow-700/50 shadow-md";
+            taskDiv.innerHTML = '<div class="font-bold text-yellow-300 text-xs">' + (t.taskName || '未命名任務') + '</div>' +
+              '<div class="text-2xs text-yellow-500/80 mt-1.5 flex justify-between">' +
+                '<span>👤 ' + (t.unit || '未定') + '</span>' +
+                '<span>⏳ ' + (t.dueDate || '未定') + '</span>' +
+              '</div>';
+            tasksBox.appendChild(taskDiv);
+          });
+        }
+      }
+      var todayStr = new Date().toLocaleDateString("zh-TW");
+      fetch(GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({
+          action: "archive",
+          meetingDate: todayStr,
+          transcript: fullTranscript,
+          tasksJsonString: JSON.stringify(tasksObj)
+        })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(response) {
+        var btnStop = document.getElementById("btn-stop");
+        if (btnStop) {
+          if (response && response.success) {
+            btnStop.innerHTML = '✅ 紀錄與 Google Doc 建立完成！<br><a href="' + response.url + '" target="_blank" class="underline text-blue-200 hover:text-white font-bold">📄 點此開啟會議紀錄</a>';
+            btnStop.className = "flex-1 py-3 bg-green-800 text-white font-bold rounded-xl text-sm border border-green-600 shadow-xl";
+          } else {
+            alert("匯出失敗：" + (response ? response.msg : "未知錯誤"));
+            btnStop.innerText = "❌ 匯出失敗";
+          }
+        }
+      })
+      .catch(function(err) {
+        console.error("匯出失敗：", err);
+        alert("匯出網路請求異常：" + err.toString());
+      });
+    }
+  </script>
+</body>
+</html>
