@@ -223,7 +223,6 @@
       websocket = new WebSocket(WS_URL);
       websocket.onopen = function () {
         websocket.send(JSON.stringify({
-        websocket.send(JSON.stringify({
           setup: {
             model: "models/" + MODEL_NAME,
             generationConfig: { responseModalities: ["AUDIO"] },
