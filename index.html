@@ -324,10 +324,18 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
             action: "finalizeMeeting",
-            meetingDate: todayStr,
+           meetingDate: todayStr,
             transcript: fullTranscript
           })
         });
+        renderTasks(response && response.tasksObj ? response.tasksObj : []);
+        if (response && response.success) {
+          btnStop.innerHTML = '✅ 紀錄與 Google Doc 建立完成！<br><a href="' + response.url + '" target="_blank" class="underline text-blue-200 hover:text-white font-bold">📄 點此開啟會議紀錄</a>';
+          btnStop.className = "flex-1 py-3 bg-green-800 text-white font-bold rounded-xl text-sm border border-green-600 shadow-xl";
+        } else {
+          alert("匯出失敗：" + (response ? response.msg : "未知錯誤"));
+          btnStop.innerText = "❌ 匯出失敗";
+        }
       } catch (err) {
         console.error("finalizeMeeting 失敗：", err);
         alert("匯出網路請求異常：" + err.toString());
