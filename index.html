@@ -166,6 +166,9 @@
         processor.onaudioprocess = function (e) {
           if (!isRecording || !isSessionReady || !websocket || websocket.readyState !== WebSocket.OPEN) return;
           var float32 = e.inputBuffer.getChannelData(0);
+          var maxAmp = 0;
+          for (var i = 0; i < float32.length; i++) { if (Math.abs(float32[i]) > maxAmp) maxAmp = Math.abs(float32[i]); }
+          if (Math.random() < 0.05) console.log("🎚️ 目前音量峰值：", maxAmp.toFixed(4));		  	  
           var pcm16 = floatTo16BitPCM(float32);
           var base64Audio = arrayBufferToBase64(pcm16.buffer);
           websocket.send(JSON.stringify({
@@ -215,10 +218,9 @@
         }));
       };
       websocket.onmessage = function (event) {
-        if (typeof event.data !== "string") {
-          return;
-        }
+        if (typeof event.data !== "string") return;
         var response = JSON.parse(event.data);
+        console.log("📩 收到 Gemini 訊息：", response); 
         if (response.setupComplete) {
           isSessionReady = true;
           return;
