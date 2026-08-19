@@ -40,6 +40,10 @@
         <strong class="underline">麥克風 (Microphone)</strong> 開啟為 <strong>「允許」</strong>，完成後重新整理此網頁即可開始收音。
       </p>
     </div>
+	<div class="flex items-center gap-2 mb-2 text-sm text-gray-300">
+ 	 <input type="checkbox" id="chk-system-audio" class="w-4 h-4">
+ 	 <label for="chk-system-audio">我方主持會議（需額外擷取電腦系統聲音）</label>
+	</div>
     <div class="flex gap-4">
       <button id="btn-start" onclick="startMeeting()" class="flex-1 py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-green-900/40 active:scale-98 cursor-pointer">
         ▶️ 開始收音
@@ -113,6 +117,8 @@
     }
     document.addEventListener("DOMContentLoaded", checkMicrophonePermission);
 
+    var systemStream = null;
+
     async function startMeeting() {
       var btnStart = document.getElementById("btn-start");
       btnStart.disabled = true;
@@ -126,7 +132,16 @@
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         document.getElementById("mic-perm-banner").classList.add("hidden");
-
+        var needSystemAudio = document.getElementById("chk-system-audio").checked;
+       if (needSystemAudio) {
+          btnStart.innerText = "⏳ 請選擇要分享的視訊會議分頁並勾選「分享音訊」...";
+          systemStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+          systemStream.getVideoTracks().forEach(function (t) { t.stop(); });
+          if (systemStream.getAudioTracks().length === 0) {
+            alert("⚠️ 沒有偵測到系統音訊，請確認分享時有勾選「分享音訊」。將只使用麥克風收音。");
+            systemStream = null;
+          }
+       }
         var tokenRes = await fetch(GAS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -136,16 +151,18 @@
         if (!tokenData || !tokenData.success || !tokenData.token) {
           throw new Error("無法取得 Gemini Live 連線權杖：" + (tokenData ? tokenData.msg : "未知錯誤"));
         }
-
-        // 拿到權杖後才能建立連線、啟動背景自動重連
         currentToken = tokenData.token;
         tokenIssuedAt = Date.now();
         connectLiveSession(currentToken, tokenData.systemPrompt, null);
         scheduleSessionRefresh();
-
         audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         sourceNode = audioContext.createMediaStreamSource(micStream);
         processor = audioContext.createScriptProcessor(4096, 1, 1);
+        sourceNode.connect(processor);
+        if (systemStream) {
+          var sysSourceNode = audioContext.createMediaStreamSource(systemStream);
+          sysSourceNode.connect(processor);  
+        }
         processor.onaudioprocess = function (e) {
           if (!isRecording || !isSessionReady || !websocket || websocket.readyState !== WebSocket.OPEN) return;
           var float32 = e.inputBuffer.getChannelData(0);
@@ -155,8 +172,10 @@
             realtimeInput: { audio: { data: base64Audio, mimeType: "audio/pcm;rate=16000" } }
           }));
         };
-        sourceNode.connect(processor);
-        processor.connect(audioContext.destination);
+        var muteNode = audioContext.createGain();
+        muteNode.gain.value = 0;
+        processor.connect(muteNode);
+        muteNode.connect(audioContext.destination);
         btnStart.className = "flex-1 py-3.5 bg-gray-800 text-gray-500 font-bold rounded-xl text-base md:text-lg cursor-not-allowed";
         btnStart.innerText = "🎙️ 正在收音中...";
         var btnStop = document.getElementById("btn-stop");
@@ -171,7 +190,7 @@
         resetStartButton();
         document.getElementById("mic-perm-banner").classList.remove("hidden");
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          alert("🛑 麥克風權限已被瀏覽器封鎖！請允許麥克風權限後重新整理網頁。");
+          alert("🛑 麥克風或畫面分享權限被拒絕！請允許權限後重新整理網頁。");
         } else {
           alert("🛑 啟動失敗：" + (err.message || err.toString()));
         }
@@ -263,6 +282,7 @@
       isRecording = false;
       if (processor) { processor.disconnect(); processor.onaudioprocess = null; }
       if (sourceNode) sourceNode.disconnect();
+	  if (systemStream) { systemStream.getTracks().forEach(function (t) { t.stop(); }); systemStream = null; }
       if (audioContext) audioContext.close();
       if (micStream) micStream.getTracks().forEach(function (t) { t.stop(); });
       if (websocket && websocket.readyState === WebSocket.OPEN) websocket.close();
