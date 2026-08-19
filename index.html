@@ -259,8 +259,10 @@
         var content = response.serverContent;
         if (content && content.outputTranscription && content.outputTranscription.text) {
           currentTurnBuffer += content.outputTranscription.text;
+          updateLiveTranscriptPreview(currentTurnBuffer.trim());   // ← 新增：即時更新暫存預覽
         }
         if (content && content.turnComplete) {
+          clearLiveTranscriptPreview();                             // ← 新增：移除暫存預覽
           renderTranscriptLine(currentTurnBuffer.trim());
           fullTranscript += currentTurnBuffer.trim() + "\n\n";
           currentTurnBuffer = "";
@@ -302,6 +304,24 @@
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
     }
+
+	function updateLiveTranscriptPreview(text) {
+ 	 var box = document.getElementById("transcript-container");
+  	var liveDiv = document.getElementById("live-preview-line");
+  	if (!liveDiv) {
+  	  liveDiv = document.createElement("div");
+ 	   liveDiv.id = "live-preview-line";
+ 	   liveDiv.className = "bg-blue-950/20 p-3 rounded-lg border border-dashed border-blue-800/50 leading-relaxed font-sans text-gray-400 italic";
+ 	  box.appendChild(liveDiv);
+ 	 }
+ 	 liveDiv.textContent = text + " …";
+ 	 box.scrollTop = box.scrollHeight;
+	}
+
+	function clearLiveTranscriptPreview() {
+ 	 var liveDiv = document.getElementById("live-preview-line");
+ 	 if (liveDiv) liveDiv.remove();
+	}
 
     function stopMeeting() {
       clearInterval(refreshTimerId);
