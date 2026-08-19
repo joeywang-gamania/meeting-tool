@@ -30,7 +30,6 @@
         <span>↩</span> 返回專案追蹤
       </a>
     </div>
-
     <div id="mic-perm-banner" class="hidden bg-red-950/80 border border-red-500 p-4 rounded-xl shadow-2xl space-y-2">
       <div class="flex items-center gap-2 font-bold text-red-300 text-sm">
         <span>⚠️</span> 瀏覽器麥克風權限受阻
@@ -40,7 +39,6 @@
         <strong class="underline">麥克風 (Microphone)</strong> 開啟為 <strong>「允許」</strong>，完成後重新整理此網頁即可開始收音。
       </p>
     </div>
-
     <div class="flex gap-4">
       <button id="btn-start" onclick="startMeeting()" class="flex-1 py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-green-900/40 active:scale-98 cursor-pointer">
         ▶️ 開始收音
@@ -49,7 +47,6 @@
         ⏹️ 結束並生成紀錄
       </button>
     </div>
-
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div class="lg:col-span-2 bg-navy-card rounded-xl border border-navy-light flex flex-col shadow-xl overflow-hidden">
         <div class="bg-blue-900/30 px-4 py-3 border-b border-navy-light flex justify-between items-center">
@@ -81,7 +78,6 @@
 
   <script>
     var GAS_API_URL = "https://script.google.com/macros/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec";
-
     var audioContext, processor, sourceNode, micStream, websocket;
     var isRecording = false;
     var isSessionReady = false;
@@ -107,21 +103,22 @@
     document.addEventListener("DOMContentLoaded", checkMicrophonePermission);
 
     async function startMeeting() {
+	  var currentToken = tokenData.token;
+	  tokenIssuedAt = Date.now();
+	  connectLiveSession(currentToken, tokenData.systemPrompt, null);
+	  scheduleSessionRefresh();
       var btnStart = document.getElementById("btn-start");
       btnStart.disabled = true;
       btnStart.innerText = "⏳ 請求麥克風權限中...";
       btnStart.className = "flex-1 py-3.5 bg-yellow-800 text-yellow-200 font-bold rounded-xl text-base md:text-lg cursor-wait animate-pulse";
-
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         alert("🛑 當前網域環境未支援 Web Audio 或非安全 HTTPS 連線。");
         resetStartButton();
         return;
       }
-
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         document.getElementById("mic-perm-banner").classList.add("hidden");
-
         var tokenRes = await fetch(GAS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -131,13 +128,10 @@
         if (!tokenData || !tokenData.success || !tokenData.token) {
           throw new Error("無法取得 Gemini Live 連線權杖：" + (tokenData ? tokenData.msg : "未知錯誤"));
         }
-
         connectLiveSession(tokenData.token, tokenData.systemPrompt);
-
         audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         sourceNode = audioContext.createMediaStreamSource(micStream);
         processor = audioContext.createScriptProcessor(4096, 1, 1);
-
         processor.onaudioprocess = function (e) {
           if (!isRecording || !isSessionReady || !websocket || websocket.readyState !== WebSocket.OPEN) return;
           var float32 = e.inputBuffer.getChannelData(0);
@@ -149,7 +143,6 @@
         };
         sourceNode.connect(processor);
         processor.connect(audioContext.destination);
-
         btnStart.className = "flex-1 py-3.5 bg-gray-800 text-gray-500 font-bold rounded-xl text-base md:text-lg cursor-not-allowed";
         btnStart.innerText = "🎙️ 正在收音中...";
         var btnStop = document.getElementById("btn-stop");
@@ -158,9 +151,7 @@
         document.getElementById("rec-indicator").classList.remove("hidden");
         var placeholder = document.getElementById("empty-placeholder");
         if (placeholder) placeholder.remove();
-
         isRecording = true;
-
       } catch (err) {
         console.error("即時串流啟動失敗：", err);
         resetStartButton();
@@ -173,28 +164,42 @@
       }
     }
 
-    function connectLiveSession(token, systemPrompt) {
+    var sessionResumptionHandle = null;
+    var refreshTimerId = null;
+    var REFRESH_INTERVAL_MS = 9 * 60 * 1000;   // 每 9 分鐘主動重連一次（避開 10 分鐘強制重置）
+    var TOKEN_LIFETIME_MS = 30 * 60 * 1000;    // 權杖有效期 30 分鐘
+    var tokenIssuedAt = 0;
+    var currentSystemPrompt = "";
+
+    function connectLiveSession(token, systemPrompt, resumeHandle) {
       var MODEL_NAME = "gemini-3.1-flash-live-preview";
       var WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=" + token;
       isSessionReady = false;
+      currentSystemPrompt = systemPrompt;
       websocket = new WebSocket(WS_URL);
-
       websocket.onopen = function () {
         websocket.send(JSON.stringify({
           setup: {
             model: "models/" + MODEL_NAME,
             generationConfig: { responseModalities: ["AUDIO"] },
             outputAudioTranscription: {},
-            systemInstruction: { parts: [{ text: systemPrompt }] }
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            sessionResumption: resumeHandle ? { handle: resumeHandle } : {}
           }
         }));
       };
-
       websocket.onmessage = function (event) {
         var response = JSON.parse(event.data);
         if (response.setupComplete) {
           isSessionReady = true;
           return;
+        }
+        if (response.sessionResumptionUpdate) {
+          var sru = response.sessionResumptionUpdate;
+          if (sru.resumable && sru.newHandle) {
+            sessionResumptionHandle = sru.newHandle;
+            console.log("✅ 已更新續傳 handle");
+          }
         }
         var content = response.serverContent;
         if (content && content.outputTranscription && content.outputTranscription.text) {
@@ -206,7 +211,6 @@
           currentTurnBuffer = "";
         }
       };
-
       websocket.onerror = function (e) { console.error("WebSocket 錯誤：", e); };
       websocket.onclose = function (e) { console.log("WebSocket 已關閉：", e.code, e.reason); };
     }
@@ -245,13 +249,13 @@
     }
 
     function stopMeeting() {
+	  clearInterval(refreshTimerId);
       isRecording = false;
       if (processor) { processor.disconnect(); processor.onaudioprocess = null; }
       if (sourceNode) sourceNode.disconnect();
       if (audioContext) audioContext.close();
       if (micStream) micStream.getTracks().forEach(function (t) { t.stop(); });
       if (websocket && websocket.readyState === WebSocket.OPEN) websocket.close();
-
       document.getElementById("rec-indicator").classList.add("hidden");
       var btnStop = document.getElementById("btn-stop");
       btnStop.innerText = "🔄 正在萃取待辦並產出會議紀錄...";
@@ -311,6 +315,41 @@
           "</div>";
         tasksBox.appendChild(taskDiv);
       });
+    }
+	
+	function scheduleSessionRefresh() {
+ 	 clearInterval(refreshTimerId);
+ 	 refreshTimerId = setInterval(refreshLiveSession, REFRESH_INTERVAL_MS);
+	}
+
+    async function refreshLiveSession() {
+      if (!isRecording) return;
+      try {
+        var elapsed = Date.now() - tokenIssuedAt;
+        var token;
+        if (elapsed < TOKEN_LIFETIME_MS - 5 * 60 * 1000) {
+          token = currentToken;
+        } else {
+          var tokenRes = await fetch(GAS_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ action: "getLiveToken" })
+          });
+          var tokenData = await tokenRes.json();
+          if (!tokenData || !tokenData.success || !tokenData.token) {
+            console.error("背景更新權杖失敗：", tokenData);
+            return;
+          }
+          token = tokenData.token;
+          currentToken = token;
+          tokenIssuedAt = Date.now();
+        }
+        if (websocket && websocket.readyState === WebSocket.OPEN) websocket.close();
+        connectLiveSession(token, currentSystemPrompt, sessionResumptionHandle);
+        console.log("🔄 已背景重連 Live session（保留對話上下文）");
+      } catch (err) {
+        console.error("背景重連失敗：", err);
+      }
     }
   </script>
 </body>
