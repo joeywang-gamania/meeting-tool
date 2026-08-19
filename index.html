@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -78,12 +79,22 @@
   </div>
 
   <script>
+    // ===== 全域狀態變數 =====
     var GAS_API_URL = "https://script.google.com/macros/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec";
     var audioContext, processor, sourceNode, micStream, websocket;
     var isRecording = false;
     var isSessionReady = false;
     var fullTranscript = "";
     var currentTurnBuffer = "";
+
+    // Session Resumption / 背景自動重連相關狀態
+    var currentToken = null;
+    var currentSystemPrompt = "";
+    var sessionResumptionHandle = null;
+    var refreshTimerId = null;
+    var REFRESH_INTERVAL_MS = 9 * 60 * 1000;   // 每 9 分鐘主動重連一次（避開 10 分鐘強制重置）
+    var TOKEN_LIFETIME_MS = 30 * 60 * 1000;    // 權杖有效期 30 分鐘
+    var tokenIssuedAt = 0;
 
     function resetStartButton() {
       var btnStart = document.getElementById("btn-start");
@@ -116,6 +127,7 @@
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         document.getElementById("mic-perm-banner").classList.add("hidden");
+
         var tokenRes = await fetch(GAS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -125,10 +137,13 @@
         if (!tokenData || !tokenData.success || !tokenData.token) {
           throw new Error("無法取得 Gemini Live 連線權杖：" + (tokenData ? tokenData.msg : "未知錯誤"));
         }
+
+        // 拿到權杖後才能建立連線、啟動背景自動重連
         currentToken = tokenData.token;
         tokenIssuedAt = Date.now();
         connectLiveSession(currentToken, tokenData.systemPrompt, null);
         scheduleSessionRefresh();
+
         audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         sourceNode = audioContext.createMediaStreamSource(micStream);
         processor = audioContext.createScriptProcessor(4096, 1, 1);
@@ -163,13 +178,6 @@
         }
       }
     }
-
-    var sessionResumptionHandle = null;
-    var refreshTimerId = null;
-    var REFRESH_INTERVAL_MS = 9 * 60 * 1000;   // 每 9 分鐘主動重連一次（避開 10 分鐘強制重置）
-    var TOKEN_LIFETIME_MS = 30 * 60 * 1000;    // 權杖有效期 30 分鐘
-    var tokenIssuedAt = 0;
-    var currentSystemPrompt = "";
 
     function connectLiveSession(token, systemPrompt, resumeHandle) {
       var MODEL_NAME = "gemini-3.1-flash-live-preview";
@@ -249,7 +257,7 @@
     }
 
     function stopMeeting() {
-	  clearInterval(refreshTimerId);
+      clearInterval(refreshTimerId);
       isRecording = false;
       if (processor) { processor.disconnect(); processor.onaudioprocess = null; }
       if (sourceNode) sourceNode.disconnect();
@@ -316,11 +324,11 @@
         tasksBox.appendChild(taskDiv);
       });
     }
-	
-	function scheduleSessionRefresh() {
- 	 clearInterval(refreshTimerId);
- 	 refreshTimerId = setInterval(refreshLiveSession, REFRESH_INTERVAL_MS);
-	}
+
+    function scheduleSessionRefresh() {
+      clearInterval(refreshTimerId);
+      refreshTimerId = setInterval(refreshLiveSession, REFRESH_INTERVAL_MS);
+    }
 
     async function refreshLiveSession() {
       if (!isRecording) return;
