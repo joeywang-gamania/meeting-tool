@@ -196,8 +196,9 @@
       }
     }
 
-    async function fetchWithRetry(url, options, maxRetries) {
+    async function fetchWithRetry(url, options, maxRetries, retryDelayMs) {
       maxRetries = maxRetries || 3;
+      retryDelayMs = retryDelayMs || 800;
       var lastErr;
       for (var attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -205,9 +206,9 @@
           return await res.json();
         } catch (err) {
           lastErr = err;
-          console.warn("⚠️ 第 " + attempt + " 次呼叫後端失敗，" + (attempt < maxRetries ? "0.8 秒後重試..." : "已達重試上限"), err);
+          console.warn("⚠️ 第 " + attempt + " 次呼叫後端失敗，" + (attempt < maxRetries ? (retryDelayMs / 1000) + " 秒後重試..." : "已達重試上限"), err);
           if (attempt < maxRetries) {
-            await new Promise(function (resolve) { setTimeout(resolve, 800); });
+            await new Promise(function (resolve) { setTimeout(resolve, retryDelayMs); });
           }
         }
       }
@@ -222,12 +223,18 @@
       websocket = new WebSocket(WS_URL);
       websocket.onopen = function () {
         websocket.send(JSON.stringify({
+        websocket.send(JSON.stringify({
           setup: {
             model: "models/" + MODEL_NAME,
             generationConfig: { responseModalities: ["AUDIO"] },
             outputAudioTranscription: {},
             systemInstruction: { parts: [{ text: systemPrompt }] },
-            sessionResumption: resumeHandle ? { handle: resumeHandle } : {}
+            sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
+            realtimeInputConfig: {
+              automaticActivityDetection: {
+                silenceDurationMs: 500   // 預設較長，改成 500ms 沉默就判斷你講完了
+              }
+            }
           }
         }));
       };
@@ -259,10 +266,10 @@
         var content = response.serverContent;
         if (content && content.outputTranscription && content.outputTranscription.text) {
           currentTurnBuffer += content.outputTranscription.text;
-          updateLiveTranscriptPreview(currentTurnBuffer.trim());   // ← 新增：即時更新暫存預覽
+          updateLiveTranscriptPreview(currentTurnBuffer.trim());  
         }
         if (content && content.turnComplete) {
-          clearLiveTranscriptPreview();                             // ← 新增：移除暫存預覽
+          clearLiveTranscriptPreview();                       
           renderTranscriptLine(currentTurnBuffer.trim());
           fullTranscript += currentTurnBuffer.trim() + "\n\n";
           currentTurnBuffer = "";
@@ -307,12 +314,12 @@
 
 	function updateLiveTranscriptPreview(text) {
  	 var box = document.getElementById("transcript-container");
-  	var liveDiv = document.getElementById("live-preview-line");
-  	if (!liveDiv) {
-  	  liveDiv = document.createElement("div");
+  	 var liveDiv = document.getElementById("live-preview-line");
+  	 if (!liveDiv) {
+  	   liveDiv = document.createElement("div");
  	   liveDiv.id = "live-preview-line";
  	   liveDiv.className = "bg-blue-950/20 p-3 rounded-lg border border-dashed border-blue-800/50 leading-relaxed font-sans text-gray-400 italic";
- 	  box.appendChild(liveDiv);
+ 	   box.appendChild(liveDiv);
  	 }
  	 liveDiv.textContent = text + " …";
  	 box.scrollTop = box.scrollHeight;
@@ -349,16 +356,25 @@
       }
       var todayStr = new Date().toLocaleDateString("zh-TW");
       try {
+        btnStop.innerText = "🔄 正在萃取待辦事項...";
+        var tasksData = await fetchWithRetry(GAS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "extractTasks", transcript: fullTranscript })
+        }, 5, 1200);  
+        var tasksObj = (tasksData && tasksData.tasksObj) || [];
+        renderTasks(tasksObj);
+        btnStop.innerText = "🔄 正在建立 Google Doc...";
         var response = await fetchWithRetry(GAS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
-            action: "finalizeMeeting",
+            action: "archiveOnly",
            meetingDate: todayStr,
-            transcript: fullTranscript
+            transcript: fullTranscript,
+            tasksJsonString: JSON.stringify(tasksObj)
           })
-        });
-        renderTasks(response && response.tasksObj ? response.tasksObj : []);
+        }, 5, 1200);
         if (response && response.success) {
           btnStop.innerHTML = '✅ 紀錄與 Google Doc 建立完成！<br><a href="' + response.url + '" target="_blank" class="underline text-blue-200 hover:text-white font-bold">📄 點此開啟會議紀錄</a>';
           btnStop.className = "flex-1 py-3 bg-green-800 text-white font-bold rounded-xl text-sm border border-green-600 shadow-xl";
@@ -368,7 +384,9 @@
         }
       } catch (err) {
         console.error("finalizeMeeting 失敗：", err);
-        alert("匯出網路請求異常：" + err.toString());
+        alert("匯出網路請求異常：" + err.toString() + "\n\n可以嘗試重新整理後手動重試。");
+        btnStop.innerText = "❌ 匯出失敗，請重試";
+        btnStop.disabled = false;
       }
     }
 
