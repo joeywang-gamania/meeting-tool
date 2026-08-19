@@ -231,10 +231,20 @@
           }
         }));
       };
-      websocket.onmessage = function (event) {
-        if (typeof event.data !== "string") return;
-        var response = JSON.parse(event.data);
-        console.log("📩 收到 Gemini 訊息：", response); 
+      websocket.onmessage = async function (event) {
+        var raw = event.data;
+        if (raw instanceof Blob) {
+          raw = await raw.text();   // 二進位訊框也先轉成文字
+        }
+        if (typeof raw !== "string") return;
+        var response;
+        try {
+          response = JSON.parse(raw);
+        } catch (e) {
+          console.warn("⚠️ 收到無法解析的訊息，略過：", e);
+          return;
+        }
+        console.log("📩 收到 Gemini 訊息：", response);
         if (response.setupComplete) {
           isSessionReady = true;
           return;
@@ -246,7 +256,7 @@
             console.log("✅ 已更新續傳 handle");
           }
         }
-       var content = response.serverContent;
+        var content = response.serverContent;
         if (content && content.outputTranscription && content.outputTranscription.text) {
           currentTurnBuffer += content.outputTranscription.text;
         }
