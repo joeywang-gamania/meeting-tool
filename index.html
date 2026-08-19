@@ -104,10 +104,6 @@
     document.addEventListener("DOMContentLoaded", checkMicrophonePermission);
 
     async function startMeeting() {
-	  var currentToken = tokenData.token;
-	  tokenIssuedAt = Date.now();
-	  connectLiveSession(currentToken, tokenData.systemPrompt, null);
-	  scheduleSessionRefresh();
       var btnStart = document.getElementById("btn-start");
       btnStart.disabled = true;
       btnStart.innerText = "⏳ 請求麥克風權限中...";
@@ -129,7 +125,10 @@
         if (!tokenData || !tokenData.success || !tokenData.token) {
           throw new Error("無法取得 Gemini Live 連線權杖：" + (tokenData ? tokenData.msg : "未知錯誤"));
         }
-        connectLiveSession(tokenData.token, tokenData.systemPrompt);
+        currentToken = tokenData.token;
+        tokenIssuedAt = Date.now();
+        connectLiveSession(currentToken, tokenData.systemPrompt, null);
+        scheduleSessionRefresh();
         audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         sourceNode = audioContext.createMediaStreamSource(micStream);
         processor = audioContext.createScriptProcessor(4096, 1, 1);
