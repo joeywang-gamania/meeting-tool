@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -197,6 +196,9 @@
         }));
       };
       websocket.onmessage = function (event) {
+        if (typeof event.data !== "string") {
+          return;
+        }
         var response = JSON.parse(event.data);
         if (response.setupComplete) {
           isSessionReady = true;
@@ -209,7 +211,7 @@
             console.log("✅ 已更新續傳 handle");
           }
         }
-        var content = response.serverContent;
+       var content = response.serverContent;
         if (content && content.outputTranscription && content.outputTranscription.text) {
           currentTurnBuffer += content.outputTranscription.text;
         }
