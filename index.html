@@ -97,6 +97,7 @@
     var isSessionReady = false;
     var fullTranscript = "";
     var currentTurnBuffer = "";
+	var currentInputBuffer = ""; 
 
     // Session Resumption / 背景自動重連相關狀態
     var currentToken = null;
@@ -234,6 +235,7 @@
           setup: {
             model: "models/" + MODEL_NAME,
             generationConfig: { responseModalities: ["AUDIO"] },
+			inputAudioTranscription: {},
             outputAudioTranscription: {},
             systemInstruction: { parts: [{ text: systemPrompt }] },
             sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
@@ -247,9 +249,7 @@
       };
       websocket.onmessage = async function (event) {
         var raw = event.data;
-        if (raw instanceof Blob) {
-          raw = await raw.text();   // 二進位訊框也先轉成文字
-        }
+        if (raw instanceof Blob) raw = await raw.text();
         if (typeof raw !== "string") return;
         var response;
         try {
@@ -267,19 +267,26 @@
           var sru = response.sessionResumptionUpdate;
           if (sru.resumable && sru.newHandle) {
             sessionResumptionHandle = sru.newHandle;
-            console.log("✅ 已更新續傳 handle");
           }
         }
         var content = response.serverContent;
+        if (content && content.inputTranscription && content.inputTranscription.text) {
+         currentInputBuffer += content.inputTranscription.text;
+        }
         if (content && content.outputTranscription && content.outputTranscription.text) {
           currentTurnBuffer += content.outputTranscription.text;
-          updateLiveTranscriptPreview(currentTurnBuffer.trim());  
+          updateLiveTranscriptPreview(currentTurnBuffer.trim());
         }
         if (content && content.turnComplete) {
-          clearLiveTranscriptPreview();                       
-          renderTranscriptLine(currentTurnBuffer.trim());
-          fullTranscript += currentTurnBuffer.trim() + "\n\n";
+          clearLiveTranscriptPreview();
+          var originalText = currentInputBuffer.trim();
+          var translatedText = currentTurnBuffer.trim();
+          renderTranscriptPair(originalText, translatedText);
+          var lang = detectOriginalLanguage(originalText);
+          var langLabel = lang === "ko" ? "[韓文原文]" : "[中文原文]";
+          fullTranscript += langLabel + " " + originalText + "\n[翻譯] " + translatedText + "\n\n";
           currentTurnBuffer = "";
+          currentInputBuffer = "";
         }
       };
       websocket.onerror = function (e) { console.error("WebSocket 錯誤：", e); };
@@ -316,6 +323,41 @@
         .replace(/^我方說[，,：:]?\s*/, '<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 mr-2">[🇹🇼 我方]</span>');
       div.innerHTML = formatted;
       box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function detectOriginalLanguage(text) {
+      var hangulRegex = /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/;
+      return hangulRegex.test(text) ? "ko" : "zh";
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function renderTranscriptPair(originalText, translatedText) {
+      if (!originalText && !translatedText) return;
+      var box = document.getElementById("transcript-container");
+      var wrapper = document.createElement("div");
+      wrapper.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm space-y-2";
+      var lang = detectOriginalLanguage(originalText);
+      var badgeHtml = lang === "ko"
+        ? '<span class="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-bold border border-yellow-500/40 mr-2 text-xs">🇰🇷 韓文原文</span>'
+        : '<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 mr-2 text-xs">🇹🇼 中文原文</span>';
+      var html = "";
+      if (originalText) {
+        html += '<div>' + badgeHtml + '<span class="text-gray-300">' + escapeHtml(originalText) + '</span></div>';
+      }
+      if (translatedText) {
+        html += '<div class="pl-3 border-l-2 border-gray-700 ml-1">' +
+                  '<span class="px-2 py-0.5 rounded bg-green-500/20 text-green-300 font-bold border border-green-500/40 mr-2 text-xs">💬 翻譯</span>' +
+                  '<span class="text-gray-100">' + escapeHtml(translatedText) + '</span>' +
+                '</div>';
+      }
+      wrapper.innerHTML = html;
+      box.appendChild(wrapper);
       box.scrollTop = box.scrollHeight;
     }
 
