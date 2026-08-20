@@ -283,13 +283,17 @@
         if (content && content.turnComplete) {
           clearLiveTranscriptPreview();
           var originalText = currentInputBuffer.trim();
-          var translatedText = currentTurnBuffer.trim();
-          renderTranscriptPair(originalText, translatedText);
-          var lang = detectOriginalLanguage(originalText);
-          var langLabel = lang === "ko" ? "[韓文原文]" : "[中文原文]";
-          fullTranscript += langLabel + " " + originalText + "\n[翻譯] " + translatedText + "\n\n";
-          currentTurnBuffer = "";
-          currentInputBuffer = "";
+          var translatedText = currentTurnBuffer.trim();       
+          if (translatedText) {
+            renderTranscriptPair(originalText, translatedText);
+            var lang = detectOriginalLanguage(originalText);
+            var langLabel = lang === "ko" ? "[韓文原文]" : "[中文原文]";
+            fullTranscript += langLabel + " " + originalText + "\n[翻譯] " + translatedText + "\n\n";
+            currentTurnBuffer = "";
+            currentInputBuffer = "";
+          } else {
+            currentTurnBuffer = "";
+          }
         }
       };
       websocket.onerror = function (e) { console.error("WebSocket 錯誤：", e); };
@@ -340,11 +344,12 @@
       return div.innerHTML;
     }
 	
-	function classifyChar(ch) {
- 	 if (/[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/.test(ch)) return "ko";      
- 	 if (/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(ch)) return "zh";                  
- 	 return null;   
-	}
+ 	function classifyChar(ch) {
+ 	  if (/[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/.test(ch)) return "ko";
+  	 if (/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(ch)) return "zh";
+  	 if (/[a-zA-Z0-9\s.,!?;:'"()\-\/]/.test(ch)) return null;  
+  	 return "other";  
+ 	}
 	
 	function splitOriginalBySegments(text) {
  	 if (!text) return [];
@@ -354,7 +359,7 @@
  	 for (var i = 0; i < text.length; i++) {
   	  var ch = text[i];
   	  var type = classifyChar(ch);
-  	  if (type === null) { current += ch; continue; }   // 中性字元不觸發切換
+  	  if (type === null) { current += ch; continue; }  
   	  if (currentType === null) currentType = type;
  	   if (type !== currentType) {
   	    segments.push({ type: currentType, text: current });
@@ -363,7 +368,7 @@
   	  }
   	  current += ch;
  	 }
- 	 if (current) segments.push({ type: currentType || "zh", text: current });
+ 	 if (current) segments.push({ type: currentType || "other", text: current });
  	 return segments;
 	}
 
@@ -399,8 +404,10 @@
       if (originalText) {
         var origSegments = splitOriginalBySegments(originalText);
         var origHtml = origSegments.map(function (seg) {
-          var colorClass = seg.type === "ko" ? "text-yellow-300" : "text-blue-200";
-          var icon = seg.type === "ko" ? "🇰🇷" : "🇹🇼";
+          var colorClass, icon;
+          if (seg.type === "ko") { colorClass = "text-yellow-300"; icon = "🇰🇷"; }
+          else if (seg.type === "zh") { colorClass = "text-blue-200"; icon = "🇹🇼"; }
+          else { colorClass = "text-gray-500 italic"; icon = "❓"; }   // other：灰色斜體，明顯標示「不確定內容」
           return '<span class="' + colorClass + '">' + icon + ' ' + escapeHtml(seg.text) + '</span>';
         }).join(" ");
         html += '<div><span class="text-2xs text-gray-500 mr-1">[原文]</span>' + origHtml + '</div>';
