@@ -241,7 +241,10 @@
             sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
             realtimeInputConfig: {
               automaticActivityDetection: {
-                silenceDurationMs: 500   // 預設較長，改成 500ms 沉默就判斷你講完了
+			    startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+				endOfSpeechSensitivity: "END_SENSITIVITY_HIGH", 
+				prefixPaddingMs: 100,
+                silenceDurationMs: 300  
               }
             }
           }
@@ -336,25 +339,88 @@
       div.textContent = str;
       return div.innerHTML;
     }
+	
+	function classifyChar(ch) {
+ 	 if (/[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/.test(ch)) return "ko";      
+ 	 if (/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(ch)) return "zh";                  
+ 	 return null;   
+	}
+	
+	function splitOriginalBySegments(text) {
+ 	 if (!text) return [];
+ 	 var segments = [];
+ 	 var current = "";
+ 	 var currentType = null;
+ 	 for (var i = 0; i < text.length; i++) {
+  	  var ch = text[i];
+  	  var type = classifyChar(ch);
+  	  if (type === null) { current += ch; continue; }   // 中性字元不觸發切換
+  	  if (currentType === null) currentType = type;
+ 	   if (type !== currentType) {
+  	    segments.push({ type: currentType, text: current });
+  	    current = "";
+  	    currentType = type;
+  	  }
+  	  current += ch;
+ 	 }
+ 	 if (current) segments.push({ type: currentType || "zh", text: current });
+ 	 return segments;
+	}
 
+    function splitTranslationBySpeaker(text) {
+      if (!text) return [];
+      var regex = /(我方說|韓方說)[：:,，]?\s*/g;
+      var matches = [];
+      var m;
+      while ((m = regex.exec(text)) !== null) {
+        matches.push({ index: m.index, length: m[0].length, speaker: m[1] });
+      }
+      if (matches.length === 0) return [{ speaker: null, text: text }];
+      var segments = [];
+      if (matches[0].index > 0) {
+        var leading = text.slice(0, matches[0].index).trim();
+        if (leading) segments.push({ speaker: null, text: leading });
+      }
+      for (var i = 0; i < matches.length; i++) {
+        var start = matches[i].index + matches[i].length;
+        var end = (i + 1 < matches.length) ? matches[i + 1].index : text.length;
+        var segText = text.slice(start, end).trim();
+        if (segText) segments.push({ speaker: matches[i].speaker, text: segText });
+      }
+      return segments;
+    }
+
+    function renderTranscriptPair(originalText, translatedText) {
     function renderTranscriptPair(originalText, translatedText) {
       if (!originalText && !translatedText) return;
       var box = document.getElementById("transcript-container");
       var wrapper = document.createElement("div");
       wrapper.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm space-y-2";
-      var lang = detectOriginalLanguage(originalText);
-      var badgeHtml = lang === "ko"
-        ? '<span class="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-bold border border-yellow-500/40 mr-2 text-xs">🇰🇷 韓文原文</span>'
-        : '<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 mr-2 text-xs">🇹🇼 中文原文</span>';
       var html = "";
       if (originalText) {
-        html += '<div>' + badgeHtml + '<span class="text-gray-300">' + escapeHtml(originalText) + '</span></div>';
+        var origSegments = splitOriginalBySegments(originalText);
+        var origHtml = origSegments.map(function (seg) {
+          var colorClass = seg.type === "ko" ? "text-yellow-300" : "text-blue-200";
+          var icon = seg.type === "ko" ? "🇰🇷" : "🇹🇼";
+          return '<span class="' + colorClass + '">' + icon + ' ' + escapeHtml(seg.text) + '</span>';
+        }).join(" ");
+        html += '<div><span class="text-2xs text-gray-500 mr-1">[原文]</span>' + origHtml + '</div>';
       }
       if (translatedText) {
-        html += '<div class="pl-3 border-l-2 border-gray-700 ml-1">' +
-                  '<span class="px-2 py-0.5 rounded bg-green-500/20 text-green-300 font-bold border border-green-500/40 mr-2 text-xs">💬 翻譯</span>' +
-                  '<span class="text-gray-100">' + escapeHtml(translatedText) + '</span>' +
-                '</div>';
+        var transSegments = splitTranslationBySpeaker(translatedText);
+        var transHtml = transSegments.map(function (seg) {
+          var badge;
+          if (seg.speaker === "韓方說") {
+            badge = '<span class="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-bold border border-yellow-500/40 mr-2 text-xs">[🇰🇷 韓方]</span>';
+          } else if (seg.speaker === "我方說") {
+            badge = '<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 mr-2 text-xs">[🇹🇼 我方]</span>';
+          } else {
+            badge = "";
+          }
+          return '<div class="pl-3 border-l-2 border-gray-700 ml-1">' + badge +
+                 '<span class="text-gray-100">' + escapeHtml(seg.text) + '</span></div>';
+        }).join("");
+        html += '<div class="space-y-1"><span class="text-2xs text-gray-500">[翻譯]</span>' + transHtml + '</div>';
       }
       wrapper.innerHTML = html;
       box.appendChild(wrapper);
