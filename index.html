@@ -276,6 +276,7 @@
         var content = response.serverContent;
         if (content && content.inputTranscription && content.inputTranscription.text) {
          currentInputBuffer += content.inputTranscription.text;
+		 updateLiveOriginalPreview(currentInputBuffer.trim()); 
         }
         if (content && content.outputTranscription && content.outputTranscription.text) {
           currentTurnBuffer += content.outputTranscription.text;
@@ -283,6 +284,7 @@
         }
         if (content && content.turnComplete) {
           clearLiveTranscriptPreview();
+		  clearLiveOriginalPreview();
           var originalText = currentInputBuffer.trim();
           var translatedText = currentTurnBuffer.trim();       
           if (translatedText) {
@@ -446,6 +448,32 @@
  	 liveDiv.textContent = text + " …";
  	 box.scrollTop = box.scrollHeight;
 	}
+
+    function updateLiveOriginalPreview(text) {
+      var box = document.getElementById("transcript-container");
+      var liveDiv = document.getElementById("live-original-line");
+      if (!liveDiv) {
+        liveDiv = document.createElement("div");
+        liveDiv.id = "live-original-line";
+        liveDiv.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm";
+        box.appendChild(liveDiv);
+      }
+      var segments = splitOriginalBySegments(text);
+      var html = segments.map(function (seg) {
+        var colorClass, icon;
+        if (seg.type === "ko") { colorClass = "text-yellow-300"; icon = "🇰🇷"; }
+        else if (seg.type === "zh") { colorClass = "text-blue-200"; icon = "🇹🇼"; }
+        else { colorClass = "text-gray-500 italic"; icon = "❓"; }
+        return '<span class="' + colorClass + '">' + icon + ' ' + escapeHtml(seg.text) + '</span>';
+      }).join(" ");
+      liveDiv.innerHTML = '<span class="text-2xs text-gray-500 mr-1">[原文]</span>' + html + ' <span class="text-gray-600 italic">…</span>';
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function clearLiveOriginalPreview() {
+      var liveDiv = document.getElementById("live-original-line");
+      if (liveDiv) liveDiv.remove();
+    }
 
 	function clearLiveTranscriptPreview() {
  	 var liveDiv = document.getElementById("live-preview-line");
