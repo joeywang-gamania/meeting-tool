@@ -234,7 +234,7 @@
         websocket.send(JSON.stringify({
           setup: {
             model: "models/" + MODEL_NAME,
-            generationConfig: { responseModalities: ["AUDIO"] },
+            generationConfig: { responseModalities: ["AUDIO"], temperature: 0.2 }
 			inputAudioTranscription: {},
             outputAudioTranscription: {},
             systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -284,14 +284,18 @@
         }
         if (content && content.turnComplete) {
           clearLiveTranscriptPreview();
-		  clearLiveOriginalPreview();
+          clearLiveOriginalPreview();
           var originalText = currentInputBuffer.trim();
-          var translatedText = currentTurnBuffer.trim();       
+          var translatedText = currentTurnBuffer.trim();
           if (translatedText) {
-            renderTranscriptPair(originalText, translatedText);
             var lang = detectOriginalLanguage(originalText);
-            var langLabel = lang === "ko" ? "[韓文原文]" : "[中文原文]";
-            fullTranscript += langLabel + " " + originalText + "\n[翻譯] " + translatedText + "\n\n";
+            if (lang === "zh") {
+              renderTranscriptPair(originalText, "");
+              fullTranscript += "[中文原文] " + originalText + "\n\n";
+            } else {
+              renderTranscriptPair(originalText, translatedText);
+              fullTranscript += "[韓文原文] " + originalText + "\n[翻譯] " + translatedText + "\n\n";
+            }
             currentTurnBuffer = "";
             currentInputBuffer = "";
           } else {
@@ -525,6 +529,7 @@
             tasksJsonString: JSON.stringify(tasksObj)
           })
         }, 5, 1200);
+		console.log("📁 建檔除錯資訊：", response);
         if (response && response.success) {
           btnStop.innerHTML = '✅ 紀錄與 Google Doc 建立完成！<br><a href="' + response.url + '" target="_blank" class="underline text-blue-200 hover:text-white font-bold">📄 點此開啟會議紀錄</a>';
           btnStop.className = "flex-1 py-3 bg-green-800 text-white font-bold rounded-xl text-sm border border-green-600 shadow-xl";
@@ -583,6 +588,10 @@
           tokenIssuedAt = Date.now();
         }
         if (websocket && websocket.readyState === WebSocket.OPEN) websocket.close();
+        currentTurnBuffer = "";
+        currentInputBuffer = "";
+        clearLiveTranscriptPreview();
+        clearLiveOriginalPreview();
         connectLiveSession(token, currentSystemPrompt, sessionResumptionHandle);
         console.log("🔄 已背景重連 Live session（保留對話上下文）");
       } catch (err) {
