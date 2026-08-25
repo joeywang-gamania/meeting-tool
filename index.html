@@ -234,7 +234,7 @@
         websocket.send(JSON.stringify({
           setup: {
             model: "models/" + MODEL_NAME,
-            generationConfig: { responseModalities: ["AUDIO"], temperature: 0.2 }
+            generationConfig: { responseModalities: ["AUDIO"], temperature: 0.2 },
 			inputAudioTranscription: {},
             outputAudioTranscription: {},
             systemInstruction: { parts: [{ text: systemPrompt }] },
