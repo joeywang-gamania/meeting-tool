@@ -640,7 +640,7 @@ var App = {
   finalized: null,
   shareSizePx: 30,
 
-  App.init = function(){
+  init = function(){
     $("lnk-back").href = CONFIG.BACK_URL;
     $("lnk-gloss").href = CONFIG.GLOSSARY_URL;
     var urlParams = new URLSearchParams(window.location.search);
@@ -990,7 +990,7 @@ var App = {
     }catch(e){ console.warn("localStorage 寫入失敗", e); }
   },
 
-  App.pushShare = function(snap){
+  pushShare = function(snap){
     var isForeign = this.isForeignSpeaker(snap);
     var aText, bText;
     if (isForeign) {
@@ -1021,7 +1021,7 @@ var App = {
     }, 800);
   };
 
-  App.copyShareUrl = function(){
+  copyShareUrl = function(){
     var baseUrl = window.location.href.split('?')[0];
     var shareUrl = baseUrl + '?view=share&s=' + (this.sessionId || ''); 
     navigator.clipboard.writeText(shareUrl).then(function(){
@@ -1031,7 +1031,7 @@ var App = {
     });
   };
 
-  App.startViewerMode = function(sessionId){
+  startViewerMode = function(sessionId){
     document.body.innerHTML = `
       <div style="background:#04070e; min-h-screen; color:#e2e8f0; font-family:system-ui,sans-serif;" class="min-h-screen flex flex-col">
         <div class="flex justify-between items-center p-4 bg-slate-900 border-b border-slate-800">
