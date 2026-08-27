@@ -268,6 +268,9 @@ input[type=text],select{
 </div>
 <script>
 const SHARE_CHANNEL_NAME = "meeting_live_share_channel";
+
+window.GAS_QUERY_PARAMS = <?= JSON.stringify(typeof queryParams !== 'undefined' ? queryParams : {}) ?>;
+
 "use strict";
 /* ============================================================================
    設定區 —— 部署時只需要改這一段
@@ -644,14 +647,14 @@ var App = {
   init: function(){
     $("lnk-back").href = CONFIG.BACK_URL;
     $("lnk-gloss").href = CONFIG.GLOSSARY_URL;
-
-    // 判斷是否為同仁開啟的共享連結 (?view=share)
+    var gasParams = window.GAS_QUERY_PARAMS || {};
     var urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('view') === 'share') {
-      this.startViewerMode(urlParams.get('s'));
+    var view = gasParams.view || urlParams.get('view');
+    var s = gasParams.s || urlParams.get('s');
+    if (view === 'share') {
+      this.startViewerMode(s);
       return;
     }
-
     if (window.self !== window.top) {
       showMsg("warn",
         "<b>⚠️ 偵測到您目前處於內嵌預覽視窗 (iframe) 中！</b><br>" +
@@ -660,7 +663,6 @@ var App = {
         "m-iframe-warn"
       );
     }
-
     if(!window.WebSocket || !window.AudioWorkletNode){
       showMsg("err", "<b>此瀏覽器不支援</b> 需要支援 AudioWorklet 與 WebSocket 的瀏覽器，請改用桌面版 Chrome 或 Edge。", "m-compat");
       $("btn-start").disabled = true;
@@ -1044,9 +1046,14 @@ var App = {
   },
 
   copyShareUrl: function(){
+    if (!this.sessionId) {
+      this.sessionId = "s" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+    }
     var baseUrl = window.location.href.split('?')[0];
-    var shareUrl = baseUrl + '?view=share&s=' + (this.sessionId || '');
-    
+    var isGas = baseUrl.includes("script.google.com");
+    var shareUrl = isGas 
+      ? baseUrl + '?page=trans&view=share&s=' + this.sessionId
+      : baseUrl + '?view=share&s=' + this.sessionId;
     navigator.clipboard.writeText(shareUrl).then(function(){
       alert("✅ 已複製同仁觀看連結！您可以將此連結發送給其他夥伴：\n\n" + shareUrl);
     }).catch(function(){
