@@ -639,15 +639,19 @@ var App = {
   finalizing: false,
   finalized: null,
   shareSizePx: 30,
+  _pushTimer: null,
 
-  init = function(){
+  init: function(){
     $("lnk-back").href = CONFIG.BACK_URL;
     $("lnk-gloss").href = CONFIG.GLOSSARY_URL;
+
+    // 判斷是否為同仁開啟的共享連結 (?view=share)
     var urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('view') === 'share') {
       this.startViewerMode(urlParams.get('s'));
       return;
     }
+
     if (window.self !== window.top) {
       showMsg("warn",
         "<b>⚠️ 偵測到您目前處於內嵌預覽視窗 (iframe) 中！</b><br>" +
@@ -656,6 +660,7 @@ var App = {
         "m-iframe-warn"
       );
     }
+
     if(!window.WebSocket || !window.AudioWorkletNode){
       showMsg("err", "<b>此瀏覽器不支援</b> 需要支援 AudioWorklet 與 WebSocket 的瀏覽器，請改用桌面版 Chrome 或 Edge。", "m-compat");
       $("btn-start").disabled = true;
@@ -669,7 +674,7 @@ var App = {
     }
     this.recoverDraft();
     this.setMode("onsite");
-  };
+  },
 
   recoverDraft: function(){
     try{
@@ -726,6 +731,12 @@ var App = {
   },
 
   start: async function(){
+    if (window.self !== window.top) {
+      alert("⚠️ 無法在內嵌面板中呼叫麥克風！\n\n系統將為您在「獨立全新分頁」開啟此頁面，請於新分頁中再按一次「開始收音」。");
+      window.open(location.href, "_blank");
+      return;
+    }
+
     var btn = $("btn-start");
     btn.disabled = true;
     btn.textContent = "⏳ 準備中…";
@@ -790,9 +801,7 @@ var App = {
         "請再按一次開始收音，在選擇器裡選<b>「分頁」</b>並勾選左下角的音訊選項。" +
         "若你選的是「整個螢幕」，請注意 macOS 上的 Chrome 無法擷取系統音訊。", "m-fail");
     }else if(name === "NotAllowedError" || name === "PermissionDeniedError"){
-      showMsg("err", "<b>麥克風權限被拒絕或遭系統沙盒攔截</b><br>" +
-        "1. <b>請勿在 Apps Script 編輯器內建預覽視窗測試</b>！請複製正式部署 URL（.../exec）並於<b>全新瀏覽器分頁</b>開啟。<br>" +
-        "2. 若已在獨立分頁開啟，請點擊網址列左側「鎖頭圖示」，將「麥克風」權限調整為「允許」。", "m-fail");
+      showMsg("err", "<b>麥克風權限被拒絕</b> 請點選網址列左側的「鎖頭圖示」，將麥克風權限設定為「允許」。", "m-fail");
     }else if(name === "NotFoundError"){
       showMsg("err", "<b>找不到麥克風</b> 請確認麥克風已接上且未被其他程式佔用。", "m-fail");
     }else{
@@ -804,7 +813,7 @@ var App = {
 
   onShareEnded: function(){
     if(!this.running) return;
-    showMsg("warn", "<b>畫面分享已停止</b>　對方通道的收音已中斷，我方麥克風仍在錄。" +
+    showMsg("warn", "<b>畫面分享已停止</b> 對方通道的收音已中斷，我方麥克風仍在錄。" +
       "若要繼續收對方聲音，請結束本次會議後重新開始。", "m-shareend");
     var s = this.sessions.theirs;
     if(s) s.close();
@@ -912,11 +921,18 @@ var App = {
     sst.textContent = on ? "即時翻譯中" : "連線中…";
   },
 
+  isForeignSpeaker: function(snap) {
+    var text = (snap.orig || "").trim();
+    if (!text) return false;
+    return /[가-힣ᄀ-ᇿぁ-ゔァ-ヴー]/.test(text);
+  },
+
   onTurn: function(snap, isFinal){
     var ph = $("feed").querySelector(".empty");
     if(ph) ph.remove();
     var interimId = "interim-" + snap.key;
     var old = $(interimId);
+
     if(!isFinal){
       if(!snap.orig && !snap.tran) return;
       if (old) {
@@ -927,6 +943,7 @@ var App = {
       this.scrollFeed();
       return;
     }
+
     if(old) old.remove();
     this.turns.push(snap);
     $("feed").appendChild(this.turnEl(snap, false, null));
@@ -936,36 +953,17 @@ var App = {
     this.persist();
   },
 
-  updateTurnEl: function(el, snap, interim) {
-    var isForeign = this.isForeignSpeaker(snap);
-    var mine = !isForeign;
-    var who = mine ? "我方" : "韓方";
-    var flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || (mine ? "🇹🇼" : "🇰🇷");
-    el.className = "turn " + (mine ? "mine" : "theirs") + (interim ? " interim" : "");
-    var h = '<div class="turn-h"><span class="who">' + flag + " " + esc(who) +
-            '</span><span class="ts">' + esc(snap.at) + '</span>' +
-            (interim ? '<span class="ts text-yellow-400 font-bold animate-pulse">辨識中…</span>' : '') + '</div>';
-    if(snap.orig) h += '<div class="orig">' + esc(snap.orig) + '</div>';
-    if(snap.tran) h += '<div class="tran">' + esc(snap.tran) + '</div>';
-    if (el.innerHTML !== h) {
-      el.innerHTML = h;
-    }
-  },
-
-  isForeignSpeaker: function(snap) {
-    var text = (snap.orig || "").trim();
-    if (!text) return false;
-    return /[가-힣ᄀ-ᇿぁ-ゔァ-ヴー]/.test(text);
-  },
-
   turnEl: function(snap, interim, id){
     var isForeign = this.isForeignSpeaker(snap);
-    var mine = !isForeign;     
+    var mine = !isForeign;
+    
     var who = mine ? "我方" : "韓方";
     var flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || (mine ? "🇹🇼" : "🇰🇷");
+
     var el = document.createElement("div");
     el.className = "turn " + (mine ? "mine" : "theirs") + (interim ? " interim" : "");
     if(id) el.id = id;
+    
     var h = '<div class="turn-h"><span class="who">' + flag + " " + esc(who) +
             '</span><span class="ts">' + esc(snap.at) + '</span>' +
             (interim ? '<span class="ts text-yellow-400 font-bold animate-pulse">辨識中…</span>' : '') + '</div>';
@@ -973,6 +971,26 @@ var App = {
     if(snap.tran) h += '<div class="tran">' + esc(snap.tran) + '</div>';
     el.innerHTML = h;
     return el;
+  },
+
+  updateTurnEl: function(el, snap, interim) {
+    var isForeign = this.isForeignSpeaker(snap);
+    var mine = !isForeign;
+    
+    var who = mine ? "我方" : "韓方";
+    var flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || (mine ? "🇹🇼" : "🇰🇷");
+
+    el.className = "turn " + (mine ? "mine" : "theirs") + (interim ? " interim" : "");
+
+    var h = '<div class="turn-h"><span class="who">' + flag + " " + esc(who) +
+            '</span><span class="ts">' + esc(snap.at) + '</span>' +
+            (interim ? '<span class="ts text-yellow-400 font-bold animate-pulse">辨識中…</span>' : '') + '</div>';
+    if(snap.orig) h += '<div class="orig">' + esc(snap.orig) + '</div>';
+    if(snap.tran) h += '<div class="tran">' + esc(snap.tran) + '</div>';
+
+    if (el.innerHTML !== h) {
+      el.innerHTML = h;
+    }
   },
 
   scrollFeed: function(){
@@ -990,9 +1008,10 @@ var App = {
     }catch(e){ console.warn("localStorage 寫入失敗", e); }
   },
 
-  pushShare = function(snap){
+  pushShare: function(snap){
     var isForeign = this.isForeignSpeaker(snap);
     var aText, bText;
+
     if (isForeign) {
       aText = snap.tran || snap.orig;
       bText = snap.orig;
@@ -1000,10 +1019,12 @@ var App = {
       aText = snap.orig;
       bText = snap.tran || snap.orig;
     }
+
     this.appendShare("share-a", aText);
     this.appendShare("share-b", bText);
+
     var self = this;
-    if (this._pushTimer) clearTimeout(this._pushPushTimer);
+    if (this._pushTimer) clearTimeout(this._pushTimer);
     this._pushTimer = setTimeout(function(){
       var linesA = [], linesB = [];
       self.turns.forEach(function(t){
@@ -1011,6 +1032,7 @@ var App = {
         linesA.push(foreign ? (t.tran || t.orig) : t.orig);
         linesB.push(foreign ? t.orig : (t.tran || t.orig));
       });
+
       callGas({
         action: 'pushShareState',
         sessionId: self.sessionId,
@@ -1019,21 +1041,44 @@ var App = {
         linesB: linesB
       }, { tries: 1 }).catch(function(e){ console.warn("雲端廣播推送微失敗:", e); });
     }, 800);
-  };
+  },
 
-  copyShareUrl = function(){
+  copyShareUrl: function(){
     var baseUrl = window.location.href.split('?')[0];
-    var shareUrl = baseUrl + '?view=share&s=' + (this.sessionId || ''); 
+    var shareUrl = baseUrl + '?view=share&s=' + (this.sessionId || '');
+    
     navigator.clipboard.writeText(shareUrl).then(function(){
       alert("✅ 已複製同仁觀看連結！您可以將此連結發送給其他夥伴：\n\n" + shareUrl);
     }).catch(function(){
       prompt("請手動複製以下觀看連結發給同仁：", shareUrl);
     });
-  };
+  },
 
-  startViewerMode = function(sessionId){
+  appendShare: function(boxId, text){
+    if(!text) return;
+    var box = $(boxId);
+    var d = document.createElement("div");
+    d.className = "share-line";
+    d.textContent = text;
+    box.appendChild(d);
+    while(box.children.length > 6) box.removeChild(box.firstChild);
+    for(var i=0;i<box.children.length;i++){
+      box.children[i].classList.toggle("dim", i < box.children.length - 2);
+    }
+    box.scrollTop = box.scrollHeight;
+  },
+
+  openShare: function(){
+    this.copyShareUrl();
+  },
+
+  closeShare: function(){
+    $("share").classList.add("hidden");
+  },
+
+  startViewerMode: function(sessionId){
     document.body.innerHTML = `
-      <div style="background:#04070e; min-h-screen; color:#e2e8f0; font-family:system-ui,sans-serif;" class="min-h-screen flex flex-col">
+      <div style="background:#04070e; min-height:100vh; color:#e2e8f0; font-family:system-ui,sans-serif;" class="min-h-screen flex flex-col">
         <div class="flex justify-between items-center p-4 bg-slate-900 border-b border-slate-800">
           <div class="text-lg font-bold text-blue-200" id="viewer-topic">📡 即時會議字幕同步中…</div>
           <div class="text-xs text-emerald-400 font-mono animate-pulse">● Live 聯播中</div>
@@ -1051,7 +1096,8 @@ var App = {
           if (res && res.data) {
             if (res.data.topic) $("viewer-topic").textContent = "🎙️ " + res.data.topic;
             var boxA = $("box-a"), boxB = $("box-b");
-            boxA.innerHTML = ""; boxB.innerHTML = "";       
+            boxA.innerHTML = ""; boxB.innerHTML = "";
+            
             (res.data.linesA || []).forEach(function(txt){
               var d = document.createElement("div");
               d.className = "text-2xl font-medium my-2 text-blue-200 leading-relaxed";
@@ -1070,161 +1116,10 @@ var App = {
         })
         .catch(function(e){ console.warn("輪詢廣播失敗:", e); });
     };
+
     poll();
-    setInterval(poll, 1500); 
-  };
-
-  appendShare: function(boxId, text){
-    if(!text) return;
-    var box = $(boxId);
-    var d = document.createElement("div");
-    d.className = "share-line";
-    d.textContent = text;
-    box.appendChild(d);
-    while(box.children.length > 6) box.removeChild(box.firstChild);
-    for(var i=0;i<box.children.length;i++){
-      box.children[i].classList.toggle("dim", i < box.children.length - 2);
-    }
-    box.scrollTop = box.scrollHeight;
+    setInterval(poll, 1500);
   },
-
-  openShare: function(){
-    var self = this;
-    if (this.shareWin && !this.shareWin.closed) {
-      this.shareWin.focus();
-      return;
-    }
-    var win = window.open("", "LiveShareWindow", "width=1100,height=750,menubar=no,toolbar=no,status=no");
-    if (!win) {
-      alert("彈出視窗被瀏覽器攔截，請允許本網站開啟彈出視窗！");
-      return;
-    }
-    this.shareWin = win;
-    win.document.open();
-    win.document.write(self.buildShareWindowHtml());
-    win.document.close();
-    setTimeout(function(){
-      self.syncShareWindowFull();
-    }, 300);
-  },
-
-  closeShare: function(){
-    if (this.shareWin && !this.shareWin.closed) {
-      this.shareWin.close();
-    }
-    this.shareWin = null;
-  },
-
-  syncShareWindowFull: function(){
-    if (!this.bc) return;
-    var self = this;
-    var linesA = [];
-    var linesB = [];
-    this.turns.forEach(function(snap){
-      var isForeign = self.isForeignSpeaker(snap);
-      if (isForeign) {
-        linesA.push(snap.tran || snap.orig);
-        linesB.push(snap.orig);
-      } else {
-        linesA.push(snap.orig);
-        linesB.push(snap.tran || snap.orig);
-      }
-    });
-    this.bc.postMessage({
-      type: 'INIT_SYNC',
-      topic: this.topic || '會議即時翻譯',
-      linesA: linesA,
-      linesB: linesB
-    });
-  },
-
-  buildShareWindowHtml: function(){
-      return `<!DOCTYPE html>
-  <html lang="zh-TW">
-  <head>
-  <meta charset="UTF-8">
-  <title>🖥️ 即時字幕共享視窗</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <style>
-    body { background: #04070e; color: #e2e8f0; font-family: system-ui, sans-serif; margin: 0; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
-    .share-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; border-bottom: 1px solid #16223c; background: #0b1122; }
-    .share-cols { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #16223c; min-height: 0; }
-    .share-col { background: #04070e; display: flex; flex-direction: column; min-height: 0; }
-    .share-col-h { padding: 12px 24px; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #16223c; }
-    .share-col-b { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; justify-content: flex-end; }
-    .share-line { font-size: var(--sharesize, 32px); line-height: 1.5; font-weight: 500; }
-    .share-line.dim { opacity: 0.35; }
-    .sizer button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #22345e; background: #1a2340; color: #dbe6f5; font-size: 1rem; cursor: pointer; }
-  </style>
-  </head>
-  <body>
-    <div class="share-bar">
-      <span class="text-lg font-bold text-blue-200" id="title">會議即時翻譯</span>
-      <div class="flex items-center gap-4">
-        <div class="sizer flex gap-2 items-center">
-          <button onclick="changeSize(-4)">−</button>
-          <button onclick="changeSize(4)">＋</button>
-        </div>
-        <button onclick="window.close()" class="bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-500/40 font-bold px-3 py-1.5 rounded-lg text-sm transition">✕ 關閉視窗</button>
-      </div>
-    </div>
-    <div class="share-cols">
-      <div class="share-col">
-        <div class="share-col-h text-blue-300">🇹🇼 中文</div>
-        <div class="share-col-b" id="share-a"></div>
-      </div>
-      <div class="share-col">
-        <div class="share-col-h text-yellow-500">🇰🇷 한국어</div>
-        <div class="share-col-b" id="share-b"></div>
-      </div>
-    </div>
-
-  <script>
-    let size = 32;
-    const bc = new BroadcastChannel("${SHARE_CHANNEL_NAME}");
-
-    function changeSize(d) {
-      size = Math.max(18, Math.min(72, size + d));
-      document.body.style.setProperty('--sharesize', size + 'px');
-    }
-
-    function appendLine(boxId, text) {
-      if (!text) return;
-      const box = document.getElementById(boxId);
-      const d = document.createElement("div");
-      d.className = "share-line";
-      d.textContent = text;
-      box.appendChild(d);
-      while (box.children.length > 7) box.removeChild(box.firstChild);
-      for (let i = 0; i < box.children.length; i++) {
-        box.children[i].classList.toggle("dim", i < box.children.length - 2);
-      }
-      box.scrollTop = box.scrollHeight;
-    }
-
-    bc.onmessage = function(ev) {
-      const data = ev.data;
-      if (!data) return;
-
-      if (data.type === 'NEW_TURN') {
-        appendLine('share-a', data.aText);
-        appendLine('share-b', data.bText);
-      } else if (data.type === 'INIT_SYNC') {
-        if (data.topic) document.getElementById('title').textContent = data.topic;
-        document.getElementById('share-a').innerHTML = '';
-        document.getElementById('share-b').innerHTML = '';
-        if (data.linesA) data.linesA.forEach(t => appendLine('share-a', t));
-        if (data.linesB) data.linesB.forEach(t => appendLine('share-b', t));
-      }
-    };
-  <\/script>
-  </body>
-  </html>`;
-  },
-
-  shareSize: function(d){ this.shareSizePx = Math.max(16, Math.min(72, this.shareSizePx + d)); this.applyShareSize(); },
-
-  applyShareSize: function(){ $("share").style.setProperty("--sharesize", this.shareSizePx + "px"); },
 
   tick: function(){
     if(!this.running) return;
@@ -1307,7 +1202,7 @@ var App = {
     $("btn-retry").disabled = true;
     if(!this.turns.length){
       $("done-status").className = "msg msg-warn";
-      $("done-status").innerHTML = "<div><b>沒有收到任何有效發言</b>　沒有逐字稿可以建檔。" +
+      $("done-status").innerHTML = "<div><b>沒有收到任何有效發言</b> 沒有逐字稿可以建檔。" +
         (this.recBlob ? "錄音備份仍可下載，可事後用錄音檔補做紀錄。" : "") + "</div>";
       this.finalizing = false;
       return;
@@ -1330,7 +1225,7 @@ var App = {
     }catch(err){
       console.error("建檔失敗", err);
       $("done-status").className = "msg msg-err";
-      $("done-status").innerHTML = "<div><b>建檔失敗</b>　" + esc(String(err.message || err)) +
+      $("done-status").innerHTML = "<div><b>建檔失敗</b>長度不足或網路問題，" + esc(String(err.message || err)) +
         "<br>逐字稿還在，沒有遺失。請按「下載逐字稿」保存一份，再按「重試建檔」。</div>";
       $("btn-retry").disabled = false;
     }
@@ -1364,7 +1259,7 @@ var App = {
       d.className = "task";
       var n = document.createElement("div");
       n.className = "task-n";
-      n.textContent = t.taskName || "未命名任務";     // textContent，不用 innerHTML（原報告 UX-8）
+      n.textContent = t.taskName || "未命名任務";
       var m = document.createElement("div");
       m.className = "task-m";
       var u = document.createElement("span"); u.textContent = "👤 " + (t.unit || "未定");
@@ -1421,6 +1316,7 @@ var App = {
     this.saveBlob(this.recBlob, "錄音_" + isoDate(new Date()) + "_" + (this.topic || "會議") + "." + ext);
   }
 };
+
 document.addEventListener("DOMContentLoaded", function(){ App.init(); });
 </script>
 </body>
