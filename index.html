@@ -1,493 +1,1189 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🎙️ 會議即時翻譯與紀錄</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { background-color: #070b14; color: #e2e8f0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    .bg-navy-card { background-color: #121b30; }
-    .border-navy-light { border-color: #22345e; }
-    .pulse-rec { animation: pulseRec 1.5s infinite; }
-    @keyframes pulseRec { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-    .transcript-box { height: 55vh; overflow-y: auto; scroll-behavior: smooth; }
-  </style>
-  <link rel="icon" href="data:,">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎙️ 會議即時翻譯與紀錄</title>
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --bg:#070b14; --card:#121b30; --card2:#0d1526; --line:#22345e; --line2:#1a2947;
+  --tx:#e2e8f0; --tx2:#9fb0c9; --tx3:#6b7d99;
+  --mine:#5b9bd5; --mine-bg:#12283f; --mine-line:#28527a;
+  --theirs:#e0a94a; --theirs-bg:#2e2413; --theirs-line:#6b5320;
+  --ok:#3fa877; --warn:#d9a13b; --err:#d75a49;
+  --btn:#1f8a5a; --btn-h:#25a86e; --stop:#b3392c; --stop-h:#cc4132;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--tx);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  font-size:15px; line-height:1.7; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1200px;margin:0 auto;padding:18px 16px 48px;display:flex;flex-direction:column;gap:16px}
+.hidden{display:none !important}
+.top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+     background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+.top h1{margin:0;font-size:19px;font-weight:700;color:#cfe0f5;display:flex;align-items:center;gap:8px}
+.top .tag{font-size:11.5px;color:var(--tx3);margin-top:2px}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.lnk{padding:8px 13px;background:#1a2340;border:1px solid #2c3a5e;border-radius:8px;
+     font-size:12.5px;font-weight:700;color:#dbe6f5;text-decoration:none;transition:.15s}
+.lnk:hover{background:#222d52}
+.lnk:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--mine);outline-offset:2px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.panel-h{padding:12px 16px;border-bottom:1px solid var(--line);font-size:13.5px;font-weight:700;
+         display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.panel-b{padding:16px}
+.setup{display:flex;flex-direction:column;gap:18px}
+.fieldset{display:flex;flex-direction:column;gap:9px}
+.lab{font-size:12.5px;font-weight:700;color:var(--tx2);letter-spacing:.03em}
+.hint{font-size:12px;color:var(--tx3);line-height:1.6}
+.modes{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.mode{background:var(--card2);border:1.5px solid var(--line2);border-radius:10px;padding:14px 16px;
+      cursor:pointer;transition:.15s;display:flex;flex-direction:column;gap:5px;text-align:left}
+.mode:hover{border-color:#33507f}
+.mode[aria-pressed="true"]{border-color:var(--mine);background:var(--mine-bg)}
+.mode b{font-size:15px}
+.mode span{font-size:12px;color:var(--tx3);line-height:1.6}
+input[type=text],select{
+  background:var(--card2);border:1px solid var(--line2);border-radius:8px;color:var(--tx);
+  padding:10px 12px;font-size:14px;font-family:inherit;width:100%}
+.row2{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.btn{border:0;border-radius:10px;padding:13px 18px;font-size:15px;font-weight:700;
+     font-family:inherit;cursor:pointer;transition:.15s;color:#fff}
+.btn-go{background:var(--btn)} .btn-go:hover:not(:disabled){background:var(--btn-h)}
+.btn-stop{background:var(--stop)} .btn-stop:hover:not(:disabled){background:var(--stop-h)}
+.btn-alt{background:#1a2340;border:1px solid #2c3a5e;color:#dbe6f5;font-size:13px;padding:10px 14px}
+.btn-alt:hover:not(:disabled){background:#222d52}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.ctrls{display:flex;gap:11px;flex-wrap:wrap}
+.ctrls .btn-go,.ctrls .btn-stop{flex:1 1 200px}
+.msg{border-radius:10px;padding:13px 16px;font-size:13px;line-height:1.65;display:flex;gap:10px;align-items:flex-start}
+.msg-err{background:#2b1210;border:1px solid #6e2a22;color:#f0bdb5}
+.msg-warn{background:#2a2211;border:1px solid #6b5320;color:#f0dcb0}
+.msg-info{background:#111e33;border:1px solid #2a4368;color:#c4d6ee}
+.msg b{color:#fff}
+.live{display:grid;gap:16px;grid-template-columns:minmax(0,2fr) minmax(260px,1fr)}
+@media(max-width:900px){.live{grid-template-columns:1fr}}
+#feed{height:58vh;min-height:320px;overflow-y:auto;scroll-behavior:smooth;
+      padding:14px;display:flex;flex-direction:column;gap:11px}
+.turn{border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;
+      border:1px solid;animation:fadein .18s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.turn{animation:none}}
+.turn.mine{background:var(--mine-bg);border-color:var(--mine-line)}
+.turn.theirs{background:var(--theirs-bg);border-color:var(--theirs-line)}
+.turn.interim{opacity:.72;border-style:dashed}
+.turn-h{display:flex;align-items:center;gap:8px;font-size:11px}
+.who{font-weight:700;padding:1px 7px;border-radius:4px;letter-spacing:.03em}
+.turn.mine .who{background:#1e3a5c;color:#9dc6ee}
+.turn.theirs .who{background:#4a3a17;color:#e8c489}
+.ts{color:var(--tx3);font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.orig{font-size:14.5px;color:var(--tx)}
+.tran{font-size:14.5px;color:#fff;padding-left:11px;border-left:2px solid;line-height:1.65}
+.turn.mine .tran{border-color:var(--mine)}
+.turn.theirs .tran{border-color:var(--theirs)}
+.empty{margin:auto;text-align:center;color:var(--tx3);font-size:13.5px;padding:40px 20px}
+.stats{display:flex;flex-direction:column;gap:0}
+.stat{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+      padding:10px 16px;border-bottom:1px solid var(--line2);font-size:13px}
+.stat:last-child{border-bottom:0}
+.stat span:first-child{color:var(--tx3);font-size:12.5px}
+.stat span:last-child{font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums;font-weight:700}
+.conn{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(63,168,119,.18)}
+.dot.wait{background:var(--warn);animation:blink 1.1s infinite}
+.dot.off{background:var(--err)}
+@keyframes blink{50%{opacity:.3}}
+@media(prefers-reduced-motion:reduce){.dot.wait{animation:none}}
+#tasks{display:flex;flex-direction:column;gap:9px;padding:14px;max-height:32vh;overflow-y:auto}
+.task{background:#221c0e;border:1px solid #5c4a1c;border-radius:9px;padding:10px 12px;
+      display:flex;flex-direction:column;gap:5px}
+.task-n{font-size:13px;font-weight:700;color:#f0d190}
+.task-m{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:#c0a468}
+#share{position:fixed;inset:0;background:#04070e;z-index:60;display:flex;flex-direction:column}
+.share-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;
+           padding:10px 18px;border-bottom:1px solid #16223c;flex-wrap:wrap}
+.share-bar .t{font-size:14px;font-weight:700;color:#a8c2e0}
+.share-cols{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#16223c;min-height:0}
+@media(max-width:760px){.share-cols{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+.share-col{background:#04070e;display:flex;flex-direction:column;min-height:0}
+.share-col-h{padding:9px 20px;font-size:12.5px;font-weight:700;letter-spacing:.06em;border-bottom:1px solid #16223c}
+.share-col-b{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:14px;justify-content:flex-end}
+.share-line{font-size:var(--sharesize,30px);line-height:1.45;font-weight:500}
+.share-line.dim{opacity:.4}
+.sizer{display:flex;align-items:center;gap:6px}
+.sizer button{width:30px;height:30px;border-radius:7px;border:1px solid #2c3a5e;background:#1a2340;
+              color:#dbe6f5;font-size:15px;cursor:pointer;font-family:inherit}
+.done-links{display:flex;flex-direction:column;gap:10px}
+.doclink{display:inline-flex;align-items:center;gap:8px;background:#12331f;border:1px solid #2c6b45;
+         border-radius:9px;padding:12px 16px;color:#a8e8c4;text-decoration:none;font-weight:700;font-size:14px}
+.doclink:hover{background:#174229}
+</style>
 </head>
-<body class="min-h-screen p-4 md:p-6">
-  <div class="max-w-6xl mx-auto space-y-5">
-    <div class="flex justify-between items-center bg-navy-card p-4 md:p-5 rounded-xl border border-navy-light shadow-lg">
-      <div>
-        <h1 class="text-xl md:text-2xl font-bold text-blue-100 flex items-center gap-2">
-          <span>🎙️</span> 會議即時翻譯與紀錄
-        </h1>
-        <p class="text-xs text-gray-400 mt-1">麥克風環境收音 / 韓文中譯 / 英文術語保留 / 雙向發話識別</p>
-      </div>
-	  <div class="flex gap-2">
-      <a id="btn-return"
-         href="https://script.google.com/a/macros/gamania.com/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec"
-         target="_top"
-         class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs md:text-sm font-bold text-white transition border border-slate-600 shadow-md active:scale-95 flex items-center gap-1 cursor-pointer">
-        <span>↩</span> 返回專案追蹤
-      </a>
-      <a id="btn-glossary"
-         href="https://docs.google.com/spreadsheets/d/1eC_TeMNOfSXbhMcvqBaxdXdekn0v2Zu7nklTShVn0bE/edit?gid=0#gid=0"
-         target="_blank"
-         class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs md:text-sm font-bold text-white transition border border-slate-600 shadow-md active:scale-95 flex items-center gap-1 cursor-pointer">
-        <span>📖</span> 開啟術語庫
-      </a>
-	  </div>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1><span>🎙️</span> 會議即時翻譯與紀錄</h1>
+      <div class="tag">Gemini Live 即時串流 · 中韓雙向 · 英文術語保留</div>
     </div>
-    <div id="mic-perm-banner" class="hidden bg-red-950/80 border border-red-500 p-4 rounded-xl shadow-2xl space-y-2">
-      <div class="flex items-center gap-2 font-bold text-red-300 text-sm">
-        <span>⚠️</span> 瀏覽器麥克風權限受阻
-      </div>
-      <p class="text-xs text-red-200 leading-relaxed">
-        請點擊網址列左側的 <strong class="bg-red-900 px-1.5 py-0.5 rounded text-white">「鎖頭 🔒」</strong>，將
-        <strong class="underline">麥克風 (Microphone)</strong> 開啟為 <strong>「允許」</strong>，完成後重新整理此網頁即可開始收音。
-      </p>
+    <div class="links">
+      <a class="lnk" id="lnk-back" href="#" target="_top">↩ 返回專案追蹤</a>
+      <a class="lnk" id="lnk-gloss" href="#" target="_blank" rel="noopener">📖 開啟術語庫</a>
     </div>
-	<div class="flex items-center gap-2 mb-2 text-sm text-gray-300">
- 	 <input type="checkbox" id="chk-system-audio" class="w-4 h-4">
- 	 <label for="chk-system-audio">我方主持會議（需額外擷取電腦系統聲音）</label>
-	</div>
-    <div class="flex gap-4">
-      <button id="btn-start" onclick="startMeeting()" class="flex-1 py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-green-900/40 active:scale-98 cursor-pointer">
-        ▶️ 開始收音
-      </button>
-      <button id="btn-stop" onclick="stopMeeting()" disabled class="flex-1 py-3.5 bg-red-950/40 text-gray-500 font-bold rounded-xl text-base md:text-lg transition border border-red-900/30 cursor-not-allowed">
-        ⏹️ 結束並生成紀錄
-      </button>
-    </div>
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      <div class="lg:col-span-2 bg-navy-card rounded-xl border border-navy-light flex flex-col shadow-xl overflow-hidden">
-        <div class="bg-blue-900/30 px-4 py-3 border-b border-navy-light flex justify-between items-center">
-          <span class="font-bold text-blue-200 text-sm flex items-center gap-2">
-            <span>💬</span> 即時翻譯逐字稿
-          </span>
-          <span id="rec-indicator" class="hidden text-xs font-bold text-red-400 flex items-center gap-2">
-            <span class="w-2.5 h-2.5 bg-red-500 rounded-full pulse-rec"></span> 收音分析中...
-          </span>
+  </div>
+  <div id="msgs" style="display:flex;flex-direction:column;gap:10px"></div>
+  <section id="scr-setup" class="panel">
+    <div class="panel-h"><span>⚙️ 會議設定</span></div>
+    <div class="panel-b setup">
+      <div class="fieldset">
+        <div class="lab">會議形式</div>
+        <div class="modes" role="group" aria-label="會議形式">
+          <button type="button" class="mode" id="mode-onsite" aria-pressed="true" onclick="App.setMode('onsite')">
+            <b>🏢 實體會議</b>
+            <span>用麥克風收音，語言由 AI 自動判斷。</span>
+          </button>
+          <button type="button" class="mode" id="mode-online" aria-pressed="false" onclick="App.setMode('online')">
+            <b>💻 線上會議</b>
+            <span>麥克風收我方、分頁音訊收對方。來源即身分，說話者標記 100% 準確。</span>
+          </button>
         </div>
-        <div id="transcript-container" class="transcript-box p-4 space-y-3 text-xs md:text-sm text-gray-300">
-          <div id="empty-placeholder" class="text-center text-gray-500 pt-16 font-medium">
-            點擊「開始收音」啟動即時聽寫與 AI 翻譯...
+      </div>
+
+
+      <div id="online-note" class="msg msg-warn hidden">
+        <div>
+          <b>線上會議必須把會議開在瀏覽器分頁裡</b>，不能用桌面版 App。<br>
+          Google Meet、Teams 網頁版、Zoom 的 <code>app.zoom.us</code> 都可以。<br>
+          按下開始後，Chrome 會請你選擇畫面來源 —— 請選<b>「分頁」</b>並務必勾選 <b>「同時分享分頁音訊」</b>，否則收不到對方聲音。
+        </div>
+      </div>
+
+
+      <div class="fieldset">
+        <div class="lab">會議主題</div>
+        <input type="text" id="in-topic" placeholder="例：2026 Q4 改版排程確認" autocomplete="off">
+        <div class="hint">會寫進會議紀錄 Doc 的標題，方便同一天多場會議區分。</div>
+      </div>
+      <div class="fieldset">
+        <div class="lab">語言</div>
+        <div class="row2">
+          <div>
+            <div class="hint" style="margin-bottom:5px">我方</div>
+            <select id="in-mine">
+              <option value="zh-TW">繁體中文</option>
+              <option value="en-US">English</option>
+              <option value="ko-KR">한국어</option>
+            </select>
+          </div>
+          <div>
+            <div class="hint" style="margin-bottom:5px">對方</div>
+            <select id="in-theirs">
+              <option value="ko-KR">한국어</option>
+              <option value="en-US">English</option>
+              <option value="ja-JP">日本語</option>
+              <option value="zh-TW">繁體中文</option>
+            </select>
           </div>
         </div>
       </div>
-      <div class="bg-navy-card rounded-xl border border-navy-light flex flex-col shadow-xl overflow-hidden">
-        <div class="bg-yellow-900/30 px-4 py-3 border-b border-navy-light">
-          <span class="font-bold text-yellow-400 text-sm flex items-center gap-2">
-            <span>📝</span> 即時擷取待辦
-          </span>
+      <div class="ctrls">
+        <button type="button" class="btn btn-go" id="btn-start" onclick="App.start()">▶️ 開始收音</button>
+      </div>
+      <div class="hint" id="setup-hint">會全程錄音作為備份。首次使用時瀏覽器會要求麥克風權限。</div>
+    </div>
+  </section>
+  <section id="scr-live" class="hidden">
+    <div class="ctrls" style="margin-bottom:16px">
+      <button type="button" class="btn btn-stop" id="btn-stop" onclick="App.stop()">⏹️ 結束並生成紀錄</button>
+      <button type="button" class="btn btn-alt" id="btn-pause" onclick="App.togglePause()">⏸️ 暫停</button>
+      <button type="button" class="btn btn-alt" onclick="App.openShare()">🖥️ 共享畫面模式</button>
+      <button type="button" class="btn btn-alt" onclick="App.downloadTranscript()">⬇️ 下載逐字稿</button>
+    </div>
+    <div class="live">
+      <div class="panel">
+        <div class="panel-h">
+          <span>💬 即時逐字稿</span>
+          <span class="conn"><span class="dot wait" id="rec-dot"></span><span id="rec-txt">準備中…</span></span>
         </div>
-        <div id="tasks-container" class="p-4 space-y-3 text-xs flex-1 overflow-y-auto">
-          <div class="text-center text-gray-500 pt-16">會議結束後，AI 將自動彙整關鍵待辦與執行單位...</div>
+        <div id="feed"><div class="empty">等待第一句發言…</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <div class="panel">
+          <div class="panel-h"><span>📡 連線狀態</span></div>
+          <div class="stats">
+            <div class="stat"><span>我方通道</span><span class="conn"><span class="dot off" id="dot-mine"></span><span id="st-mine" style="font-weight:400;font-family:inherit">—</span></span></div>
+            <div class="stat" id="row-theirs"><span>對方通道</span><span class="conn"><span class="dot off" id="dot-theirs"></span><span id="st-theirs" style="font-weight:400;font-family:inherit">—</span></span></div>
+            <div class="stat"><span>已收錄</span><span id="st-time">00:00</span></div>
+            <div class="stat"><span>句數</span><span id="st-turns">0</span></div>
+            <div class="stat"><span>術語庫</span><span id="st-gloss">—</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><span>📝 會後彙整待辦</span></div>
+          <div id="tasks"><div class="empty" style="padding:24px 12px">會議結束後自動彙整</div></div>
         </div>
       </div>
     </div>
+  </section>
+  <section id="scr-done" class="panel hidden">
+    <div class="panel-h"><span>✅ 會議紀錄</span></div>
+    <div class="panel-b" style="display:flex;flex-direction:column;gap:16px">
+      <div id="done-status" class="msg msg-info">正在產生會議紀錄…</div>
+      <div class="done-links" id="done-links"></div>
+      <div class="ctrls">
+        <button type="button" class="btn btn-alt" onclick="App.downloadTranscript()">⬇️ 下載逐字稿</button>
+        <button type="button" class="btn btn-alt" id="btn-dl-audio" onclick="App.downloadAudio()">⬇️ 下載錄音備份</button>
+        <button type="button" class="btn btn-alt" id="btn-retry" onclick="App.finalize()">🔄 重試建檔</button>
+        <button type="button" class="btn btn-alt" onclick="location.reload()">🆕 開始新會議</button>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="share" class="hidden">
+  <div class="share-bar">
+    <span class="t" id="share-title">會議即時翻譯</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="conn"><span class="dot wait" id="share-dot"></span><span id="share-st" style="font-size:12px;color:#8fa6c4">—</span></span>
+      <div class="sizer">
+        <button type="button" onclick="App.shareSize(-4)" aria-label="縮小字級">−</button>
+        <button type="button" onclick="App.shareSize(4)" aria-label="放大字級">＋</button>
+      </div>
+      <button type="button" class="btn btn-alt" onclick="App.closeShare()">✕ 離開共享模式</button>
+    </div>
   </div>
+  <div class="share-cols">
+    <div class="share-col">
+      <div class="share-col-h" style="color:#9dc6ee">🇹🇼 中文</div>
+      <div class="share-col-b" id="share-a"></div>
+    </div>
+    <div class="share-col">
+      <div class="share-col-h" style="color:#e8c489">🇰🇷 한국어</div>
+      <div class="share-col-b" id="share-b"></div>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================================================================
+   設定區 —— 部署時只需要改這一段
+   ============================================================================ */
+var CONFIG = {
+  GAS_URL: "https://script.google.com/macros/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec",
 
-  <script>
-    // ===== 全域狀態變數 =====
-    var GAS_API_URL = "https://script.google.com/macros/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec";
-    var audioContext, processor, sourceNode, micStream, websocket;
-    var isRecording = false;
-    var isSessionReady = false;
-    var fullTranscript = "";
-    var currentTurnBuffer = "";
-	var currentInputBuffer = ""; 
+  API_TOKEN: "ec8cc2d53bbf40948dab0e59d0c444ccde2982c0",
 
-    function resetStartButton() {
-      var btnStart = document.getElementById("btn-start");
-      btnStart.disabled = false;
-      btnStart.innerText = "▶️ 開始收音";
-      btnStart.className = "flex-1 py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-green-900/40 active:scale-98 cursor-pointer";
-    }
+  MODEL: "gemini-3.1-flash-live-preview",
+  OUTPUT_MODE: "TEXT",
+  BACK_URL:    "https://script.google.com/a/macros/gamania.com/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec",
+  GLOSSARY_URL:"https://docs.google.com/spreadsheets/d/1eC_TeMNOfSXbhMcvqBaxdXdekn0v2Zu7nklTShVn0bE/edit?gid=0#gid=0",
+  WS_BASE: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained",
+  TOKEN_REFRESH_MS: 24 * 60 * 1000,  
+  RECONNECT_BASE_MS: 800,
+  RECONNECT_MAX_MS: 15000,
+  LS_KEY: "meetingTool.draft.v2"
+};
+var LANG_NAME = {
+  "zh-TW":"繁體中文", "ko-KR":"韓文", "en-US":"英文", "ja-JP":"日文"
+};
+var LANG_FLAG = { "zh-TW":"🇹🇼", "ko-KR":"🇰🇷", "en-US":"🇺🇸", "ja-JP":"🇯🇵" };
 
-    function checkMicrophonePermission() {
-      if (!navigator.permissions || !navigator.permissions.query) return;
-      navigator.permissions.query({ name: "microphone" }).then(function (status) {
-        document.getElementById("mic-perm-banner").classList.toggle("hidden", status.state !== "denied");
-        status.onchange = function () {
-          document.getElementById("mic-perm-banner").classList.toggle("hidden", status.state !== "denied");
-        };
-      }).catch(function () {});
-    }
-    document.addEventListener("DOMContentLoaded", checkMicrophonePermission);
+function $(id){ return document.getElementById(id); }
 
-    var systemStream = null;
+function esc(s){ var d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML; }
 
-    var recognitionZh = null;
-    var recognitionKo = null;
+function pad2(n){ return (n<10?"0":"")+n; }
 
-    async function startMeeting() {
-      var btnStart = document.getElementById("btn-start");
-      btnStart.disabled = true;
-      btnStart.innerText = "⏳ 請求麥克風權限中...";
-      btnStart.className = "flex-1 py-3.5 bg-yellow-800 text-yellow-200 font-bold rounded-xl text-base md:text-lg cursor-wait animate-pulse";
-      var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRec) {
-        alert("🛑 此瀏覽器不支援即時語音辨識，請改用桌面版 Chrome。");
-        resetStartButton();
-        return;
-     }
-      try {
-        var tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        tempStream.getTracks().forEach(function (t) { t.stop(); });
-        document.getElementById("mic-perm-banner").classList.add("hidden");
-        recognitionZh = new SpeechRec();
-        recognitionZh.lang = "zh-TW";
-        recognitionZh.continuous = true;
-        recognitionZh.interimResults = true;
-        recognitionZh.onresult = function (e) { handleRecognitionResult(e, "zh"); };
-        recognitionZh.onerror = function (e) { console.warn("中文辨識錯誤：", e.error); };
-        recognitionZh.onend = function () { if (isRecording) recognitionZh.start(); }; 
+function clockNow(){
+  var d=new Date();
+  return pad2(d.getHours())+":"+pad2(d.getMinutes())+":"+pad2(d.getSeconds());
+}
 
-        recognitionKo = new SpeechRec();
-        recognitionKo.lang = "ko-KR";
-        recognitionKo.continuous = true;
-        recognitionKo.interimResults = true;
-        recognitionKo.onresult = function (e) { handleRecognitionResult(e, "ko"); };
-        recognitionKo.onerror = function (e) { console.warn("韓文辨識錯誤：", e.error); };
-        recognitionKo.onend = function () { if (isRecording) recognitionKo.start(); };
-        recognitionKo.start();
+function mmss(ms){
+  var s=Math.floor(ms/1000);
+  var m=Math.floor(s/60);
+  if(m<60) return pad2(m)+":"+pad2(s%60);
+  return pad2(Math.floor(m/60))+":"+pad2(m%60)+":"+pad2(s%60);
+}
 
-        btnStart.className = "flex-1 py-3.5 bg-gray-800 text-gray-500 font-bold rounded-xl text-base md:text-lg cursor-not-allowed";
-        btnStart.innerText = "🎙️ 正在收音中...";
-        var btnStop = document.getElementById("btn-stop");
-        btnStop.disabled = false;
-        btnStop.className = "flex-1 py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-base md:text-lg transition shadow-lg shadow-red-900/40 active:scale-98 cursor-pointer";
-        document.getElementById("rec-indicator").classList.remove("hidden");
-        var placeholder = document.getElementById("empty-placeholder");
-        if (placeholder) placeholder.remove();
-        isRecording = true;
-      } catch (err) {
-        console.error("即時串流啟動失敗：", err);
-        resetStartButton();
-        document.getElementById("mic-perm-banner").classList.remove("hidden");
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          alert("🛑 麥克風權限被拒絕！請允許權限後重新整理網頁。");
-        } else {
-          alert("🛑 啟動失敗：" + (err.message || err.toString()));
-        }
-      }
-    }
-	
-	var interimZh = "", interimKo = "";
+function isoDate(d){
+  return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());
+}
 
-	function handleRecognitionResult(event, langTag) {
-	  var finalText = "";
- 	  var interimText = "";
- 	  for (var i = event.resultIndex; i < event.results.length; i++) {
- 	    var t = event.results[i][0].transcript;
-   	   if (event.results[i].isFinal) finalText += t;
-   	   else interimText += t;
- 	  }
- 	  if (langTag === "zh") interimZh = interimText;
- 	  else interimKo = interimText;
- 	  updateDualLivePreview();
-	  if (finalText.trim()) {
-    	if (langTag === "zh") interimZh = "";
-        else interimKo = "";
-   	    updateDualLivePreview();
-  	    translateSentence(finalText.trim(), langTag);
-  	  }
-    }
+function abToB64(ab){
+  var bytes=new Uint8Array(ab), out="", CH=0x8000;
+  for(var i=0;i<bytes.length;i+=CH){
+    out+=String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
+  }
+  return btoa(out);
+}
 
-    function updateDualLivePreview() {
-      var box = document.getElementById("transcript-container");
-      var liveDiv = document.getElementById("live-original-line");
-      if (!liveDiv) {
-        liveDiv = document.createElement("div");
-        liveDiv.id = "live-original-line";
-        liveDiv.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm space-y-1";
-        box.appendChild(liveDiv);
-      }
-      var html = "";
-      if (interimZh) html += '<div class="text-blue-200">🇹🇼 ' + escapeHtml(interimZh) + ' <span class="text-gray-600 italic">…</span></div>';
-      if (interimKo) html += '<div class="text-yellow-300">🇰🇷 ' + escapeHtml(interimKo) + ' <span class="text-gray-600 italic">…</span></div>';
-      liveDiv.innerHTML = html || "";
-      box.scrollTop = box.scrollHeight;
-    }
+function showMsg(kind, html, id){
+  var box=$("msgs");
+  var el=id?$(id):null;
+  if(!el){
+    el=document.createElement("div");
+    if(id) el.id=id;
+    box.appendChild(el);
+  }
+  el.className="msg msg-"+kind;
+  el.innerHTML="<div>"+html+"</div>";
+  return el;
+}
+function clearMsg(id){ var el=$(id); if(el) el.remove(); }
 
-    function clearDualLivePreview() {
-      var liveDiv = document.getElementById("live-original-line");
-      if (liveDiv) liveDiv.remove();
-    }
-
-    async function translateSentence(originalText, langTag) {
-      clearDualLivePreview();
-      try {
-        var res = await fetchWithRetry(GAS_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "translateText", text: originalText })
-        });
-        var translatedText = (res && res.translated) || "";
-        var langLabel = langTag === "ko" ? "[韓文原文]" : "[中文原文]";
-        renderTranscriptPair(originalText, langTag === "ko" ? translatedText : "");
-        fullTranscript += langLabel + " " + originalText + (translatedText ? "\n[翻譯] " + translatedText : "") + "\n\n";
-      } catch (err) {
-        console.error("翻譯失敗：", err);
-        renderTranscriptPair(originalText, "");
-        fullTranscript += "[原文] " + originalText + "\n\n";
-      }
-    }
-
-    async function fetchWithRetry(url, options, maxRetries, retryDelayMs) {
-      maxRetries = maxRetries || 3;
-      retryDelayMs = retryDelayMs || 800;
-      var lastErr;
-      for (var attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          var res = await fetch(url, options);
-          return await res.json();
-        } catch (err) {
-          lastErr = err;
-          console.warn("⚠️ 第 " + attempt + " 次呼叫後端失敗，" + (attempt < maxRetries ? (retryDelayMs / 1000) + " 秒後重試..." : "已達重試上限"), err);
-          if (attempt < maxRetries) {
-            await new Promise(function (resolve) { setTimeout(resolve, retryDelayMs); });
-          }
-        }
-      }
-      throw lastErr;
-    }
-
-    function renderTranscriptLine(text) {
-      if (!text) return;
-      var box = document.getElementById("transcript-container");
-      var div = document.createElement("div");
-      div.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm";
-      var formatted = text
-        .replace(/^韓方說[，,：:]?\s*/, '<span class="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-bold border border-yellow-500/40 mr-2">[🇰🇷 韓方]</span>')
-        .replace(/^我方說[，,：:]?\s*/, '<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 mr-2">[🇹🇼 我方]</span>');
-      div.innerHTML = formatted;
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
-    }
-
-    function detectOriginalLanguage(text) {
-      var hangulRegex = /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/;
-      return hangulRegex.test(text) ? "ko" : "zh";
-    }
-
-    function escapeHtml(str) {
-      var div = document.createElement("div");
-      div.textContent = str;
-      return div.innerHTML;
-    }
-	
- 	function classifyChar(ch) {
- 	  if (/[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/.test(ch)) return "ko";
-  	 if (/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(ch)) return "zh";
-  	 if (/[a-zA-Z0-9\s.,!?;:'"()\-\/]/.test(ch)) return null;  
-  	 return "other";  
- 	}
-	
-	function splitOriginalBySegments(text) {
- 	 if (!text) return [];
- 	 var segments = [];
- 	 var current = "";
- 	 var currentType = null;
- 	 for (var i = 0; i < text.length; i++) {
-  	  var ch = text[i];
-  	  var type = classifyChar(ch);
-  	  if (type === null) { current += ch; continue; }  
-  	  if (currentType === null) currentType = type;
- 	   if (type !== currentType) {
-  	    segments.push({ type: currentType, text: current });
-  	    current = "";
-  	    currentType = type;
-  	  }
-  	  current += ch;
- 	 }
- 	 if (current) segments.push({ type: currentType || "other", text: current });
- 	 return segments;
-	}
-
-    function splitTranslationBySpeaker(text) {
-      if (!text) return [];
-      var regex = /(我方說|韓方說)[：:,，]?\s*/g;
-      var matches = [];
-      var m;
-      while ((m = regex.exec(text)) !== null) {
-        matches.push({ index: m.index, length: m[0].length, speaker: m[1] });
-      }
-      if (matches.length === 0) return [{ speaker: null, text: text }];
-      var segments = [];
-      if (matches[0].index > 0) {
-        var leading = text.slice(0, matches[0].index).trim();
-        if (leading) segments.push({ speaker: null, text: leading });
-      }
-      for (var i = 0; i < matches.length; i++) {
-        var start = matches[i].index + matches[i].length;
-        var end = (i + 1 < matches.length) ? matches[i + 1].index : text.length;
-        var segText = text.slice(start, end).trim();
-        if (segText) segments.push({ speaker: matches[i].speaker, text: segText });
-      }
-      return segments;
-    }
-
-    function renderTranscriptPair(originalText, translatedText) {
-      if (!originalText && !translatedText) return;
-      var box = document.getElementById("transcript-container");
-      var wrapper = document.createElement("div");
-      wrapper.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm space-y-2";
-      var html = "";
-      if (originalText) {
-        var origSegments = splitOriginalBySegments(originalText);
-        var origHtml = origSegments.map(function (seg) {
-          var colorClass, icon;
-          if (seg.type === "ko") { colorClass = "text-yellow-300"; icon = "🇰🇷"; }
-          else if (seg.type === "zh") { colorClass = "text-blue-200"; icon = "🇹🇼"; }
-          else { colorClass = "text-gray-500 italic"; icon = "❓"; }   // other：灰色斜體，明顯標示「不確定內容」
-          return '<span class="' + colorClass + '">' + icon + ' ' + escapeHtml(seg.text) + '</span>';
-        }).join(" ");
-        html += '<div><span class="text-2xs text-gray-500 mr-1">[原文]</span>' + origHtml + '</div>';
-      }
-      if (translatedText) {
-        var transSegments = splitTranslationBySpeaker(translatedText);
-        var transHtml = transSegments.map(function (seg) {
-          var badge;
-          if (seg.speaker === "韓方說") {
-            badge = '<span class="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-bold border border-yellow-500/40 mr-2 text-xs">[🇰🇷 韓方]</span>';
-          } else if (seg.speaker === "我方說") {
-            badge = '<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 mr-2 text-xs">[🇹🇼 我方]</span>';
-          } else {
-            badge = "";
-          }
-          return '<div class="pl-3 border-l-2 border-gray-700 ml-1">' + badge +
-                 '<span class="text-gray-100">' + escapeHtml(seg.text) + '</span></div>';
-        }).join("");
-        html += '<div class="space-y-1"><span class="text-2xs text-gray-500">[翻譯]</span>' + transHtml + '</div>';
-      }
-      wrapper.innerHTML = html;
-      box.appendChild(wrapper);
-      box.scrollTop = box.scrollHeight;
-    }
-
-	function updateLiveTranscriptPreview(text) {
- 	 var box = document.getElementById("transcript-container");
-  	 var liveDiv = document.getElementById("live-preview-line");
-  	 if (!liveDiv) {
-  	   liveDiv = document.createElement("div");
- 	   liveDiv.id = "live-preview-line";
- 	   liveDiv.className = "bg-blue-950/20 p-3 rounded-lg border border-dashed border-blue-800/50 leading-relaxed font-sans text-gray-400 italic";
- 	   box.appendChild(liveDiv);
- 	 }
- 	 liveDiv.textContent = text + " …";
- 	 box.scrollTop = box.scrollHeight;
-	}
-
-    function updateLiveOriginalPreview(text) {
-      var box = document.getElementById("transcript-container");
-      var liveDiv = document.getElementById("live-original-line");
-      if (!liveDiv) {
-        liveDiv = document.createElement("div");
-        liveDiv.id = "live-original-line";
-        liveDiv.className = "bg-blue-950/40 p-3 rounded-lg border border-blue-900/60 leading-relaxed font-sans shadow-sm";
-        box.appendChild(liveDiv);
-      }
-      var segments = splitOriginalBySegments(text);
-      var html = segments.map(function (seg) {
-        var colorClass, icon;
-        if (seg.type === "ko") { colorClass = "text-yellow-300"; icon = "🇰🇷"; }
-        else if (seg.type === "zh") { colorClass = "text-blue-200"; icon = "🇹🇼"; }
-        else { colorClass = "text-gray-500 italic"; icon = "❓"; }
-        return '<span class="' + colorClass + '">' + icon + ' ' + escapeHtml(seg.text) + '</span>';
-      }).join(" ");
-      liveDiv.innerHTML = '<span class="text-2xs text-gray-500 mr-1">[原文]</span>' + html + ' <span class="text-gray-600 italic">…</span>';
-      box.scrollTop = box.scrollHeight;
-    }
-
-    function clearLiveOriginalPreview() {
-      var liveDiv = document.getElementById("live-original-line");
-      if (liveDiv) liveDiv.remove();
-    }
-
-	function clearLiveTranscriptPreview() {
- 	 var liveDiv = document.getElementById("live-preview-line");
- 	 if (liveDiv) liveDiv.remove();
-	}
-
-    function stopMeeting() {
-      isRecording = false;
-      if (recognitionZh) { recognitionZh.onend = null; recognitionZh.stop(); }
-      if (recognitionKo) { recognitionKo.onend = null; recognitionKo.stop(); }
-      clearDualLivePreview();
-      document.getElementById("rec-indicator").classList.add("hidden");
-      var btnStop = document.getElementById("btn-stop");
-      btnStop.innerText = "🔄 正在萃取待辦並產出會議紀錄...";
-      btnStop.disabled = true;
-      btnStop.className = "flex-1 py-3.5 bg-yellow-700 text-white font-bold rounded-xl text-base md:text-lg animate-pulse";
-      finalizeMeeting();
-    }
-
-    async function finalizeMeeting() {
-      var btnStop = document.getElementById("btn-stop");
-      if (!fullTranscript.trim()) {
-        alert("未錄製到有效語音對白，無法生成會議紀錄。");
-        window.location.reload();
-        return;
-      }
-      var todayStr = new Date().toLocaleDateString("zh-TW");
-      try {
-        btnStop.innerText = "🔄 正在萃取待辦事項...";
-        var tasksData = await fetchWithRetry(GAS_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "extractTasks", transcript: fullTranscript })
-        }, 5, 1200);  
-        var tasksObj = (tasksData && tasksData.tasksObj) || [];
-        renderTasks(tasksObj);
-        btnStop.innerText = "🔄 正在建立 Google Doc...";
-        var response = await fetchWithRetry(GAS_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({
-            action: "archiveOnly",
-           meetingDate: todayStr,
-            transcript: fullTranscript,
-            tasksJsonString: JSON.stringify(tasksObj)
-          })
-        }, 5, 1200);
-		console.log("📁 建檔除錯資訊：", response);
-        if (response && response.success) {
-          btnStop.innerHTML = '✅ 紀錄與 Google Doc 建立完成！<br><a href="' + response.url + '" target="_blank" class="underline text-blue-200 hover:text-white font-bold">📄 點此開啟會議紀錄</a>';
-          btnStop.className = "flex-1 py-3 bg-green-800 text-white font-bold rounded-xl text-sm border border-green-600 shadow-xl";
-        } else {
-          alert("匯出失敗：" + (response ? response.msg : "未知錯誤"));
-          btnStop.innerText = "❌ 匯出失敗";
-        }
-      } catch (err) {
-        console.error("finalizeMeeting 失敗：", err);
-        alert("匯出網路請求異常：" + err.toString() + "\n\n可以嘗試重新整理後手動重試。");
-        btnStop.innerText = "❌ 匯出失敗，請重試";
-        btnStop.disabled = false;
-      }
-    }
-
-    function renderTasks(tasksObj) {
-      var tasksBox = document.getElementById("tasks-container");
-      if (!tasksBox) return;
-      tasksBox.innerHTML = "";
-      if (!Array.isArray(tasksObj) || tasksObj.length === 0) {
-        tasksBox.innerHTML = '<div class="text-gray-500 text-center py-6">本次會議無明確待辦事項。</div>';
-        return;
-      }
-      tasksObj.forEach(function (t) {
-        var taskDiv = document.createElement("div");
-        taskDiv.className = "bg-yellow-950/40 p-3 rounded-lg border border-yellow-700/50 shadow-md";
-        taskDiv.innerHTML = '<div class="font-bold text-yellow-300 text-xs">' + (t.taskName || "未命名任務") + "</div>" +
-          '<div class="text-2xs text-yellow-500/80 mt-1.5 flex justify-between">' +
-            "<span>👤 " + (t.unit || "未定") + "</span>" +
-            "<span>⏳ " + (t.dueDate || "未定") + "</span>" +
-          "</div>";
-        tasksBox.appendChild(taskDiv);
+async function callGas(payload, opts){
+  opts = opts || {};
+  var tries = opts.tries || 3;
+  var lastErr;
+  for(var i=1;i<=tries;i++){
+    var ctl = new AbortController();
+    var timer = setTimeout(function(){ ctl.abort(); }, opts.timeoutMs || 25000);
+    try{
+      var body = Object.assign({ token: CONFIG.API_TOKEN }, payload);
+      var res = await fetch(CONFIG.GAS_URL, {
+        method:"POST",
+        headers:{"Content-Type":"text/plain;charset=utf-8"}, 
+        body: JSON.stringify(body),
+        signal: ctl.signal
       });
+      clearTimeout(timer);
+      if(!res.ok) throw new Error("後端回應 HTTP "+res.status);
+      var text = await res.text();
+      var data;
+      try{ data = JSON.parse(text); }
+      catch(e){
+        throw new Error("後端沒有回傳 JSON，可能是部署設定為需要登入。開頭：" + text.slice(0,120));
+      }
+      if(data && data.success === false) throw new Error(data.msg || "後端回報失敗");
+      return data;
+    }catch(err){
+      clearTimeout(timer);
+      lastErr = err;
+      console.warn("[GAS] 第 "+i+"/"+tries+" 次失敗", err);
+      if(i<tries) await new Promise(function(r){ setTimeout(r, 700*i); });
     }
-  </script>
+  }
+  throw lastErr;
+}
+
+var WORKLET_SRC = `
+class Pcm16k extends AudioWorkletProcessor {
+  constructor(){
+    super();
+    this.ratio = sampleRate / 16000;   // sampleRate 是 worklet 全域變數
+    this.pos = 0;                      // 輸入串流中的小數位置
+    this.tail = new Float32Array(0);   // 跨 block 的殘餘樣本
+    this.out = [];                     // 已重採樣、尚未湊滿一包的樣本
+    this.CHUNK = 1600;                 // 16000Hz × 0.1s
+  }
+  process(inputs){
+    const input = inputs[0];
+    if(!input || !input[0]) return true;
+    const inc = input[0];
+
+    const buf = new Float32Array(this.tail.length + inc.length);
+    buf.set(this.tail, 0);
+    buf.set(inc, this.tail.length);
+
+    // 線性內插重採樣
+    let p = this.pos;
+    while(Math.floor(p) + 1 < buf.length){
+      const i = Math.floor(p), f = p - i;
+      this.out.push(buf[i] * (1 - f) + buf[i + 1] * f);
+      p += this.ratio;
+    }
+    const consumed = Math.floor(p);
+    this.tail = buf.slice(consumed);
+    this.pos = p - consumed;
+
+    // 湊滿 100ms 就送出
+    while(this.out.length >= this.CHUNK){
+      const seg = this.out.splice(0, this.CHUNK);
+      const pcm = new Int16Array(this.CHUNK);
+      for(let k=0;k<this.CHUNK;k++){
+        let v = seg[k];
+        if(v > 1) v = 1; else if(v < -1) v = -1;
+        pcm[k] = v < 0 ? v * 0x8000 : v * 0x7FFF;
+      }
+      this.port.postMessage(pcm.buffer, [pcm.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('pcm16k', Pcm16k);
+`;
+
+function LiveSession(opt){
+  this.key       = opt.key;          
+  this.label     = opt.label;
+  this.srcLang   = opt.srcLang;     
+  this.dstLang   = opt.dstLang;
+  this.mineLang  = opt.mineLang;       
+  this.glossary  = opt.glossary || "";
+  this.onTurn    = opt.onTurn;        
+  this.onState   = opt.onState;        
+  this.ws        = null;
+  this.token     = null;
+  this.handle    = null;              
+  this.ready     = false;
+  this.closing   = false;
+  this.retry     = 0;
+  this.queue     = [];                
+  this.cur       = { orig:"", tran:"", at:null };
+}
+
+LiveSession.prototype.systemPrompt = function(){
+  var dst = LANG_NAME[this.dstLang] || this.dstLang;
+  var lines = [];
+  if(this.srcLang){
+    lines.push("你是專業會議口譯。你會持續收到「"+(LANG_NAME[this.srcLang]||this.srcLang)+"」的會議語音。");
+    lines.push("你的唯一工作：把聽到的內容翻譯成「"+dst+"」。");
+  }else{
+    var mine = LANG_NAME[this.mineLang] || "繁體中文";
+    lines.push("你是專業會議口譯。你會收到一場雙語會議的語音，說話者可能使用「"+mine+"」或「"+dst+"」。");
+    lines.push("你的唯一工作：先判斷這一段是哪一種語言，然後翻譯成另一種。");
+    lines.push("聽到「"+mine+"」就翻成「"+dst+"」；聽到「"+dst+"」就翻成「"+mine+"」。");
+  }
+  lines.push("");
+  lines.push("嚴格規則：");
+  lines.push("1. 只輸出譯文本身。不要輸出原文、不要加引號、不要加「翻譯：」之類的前綴、不要解釋、不要說明你在做什麼。");
+  lines.push("2. 英文專有名詞、產品代號、系統名稱、縮寫（如 MAU、ARPPU、Ontime、GM）一律保留原文，不要翻譯。");
+  lines.push("3. 這是會議即時字幕，請用精簡、書面、可直接投影的句子。不要加語助詞。");
+  lines.push("4. 若這一段只有靜音、雜音、咳嗽、或無意義的語助詞，請輸出空白，不要編造內容。");
+  lines.push("5. 逐句翻譯，不要總結、不要合併多句、不要補充會議裡沒說過的資訊。");
+  if(this.glossary){
+    lines.push("");
+    lines.push("術語對照表（務必遵循，格式為「原文 = 譯法」）：");
+    lines.push(this.glossary);
+  }
+  return lines.join("\n");
+};
+
+LiveSession.prototype.setupMessage = function(){
+  var gen = { responseModalities: [CONFIG.OUTPUT_MODE], temperature: 0.1 };
+  var setup = {
+    model: "models/" + CONFIG.MODEL,
+    generationConfig: gen,
+    systemInstruction: { parts: [{ text: this.systemPrompt() }] },
+    inputAudioTranscription: {},          
+    sessionResumption: this.handle ? { handle: this.handle } : {},
+    contextWindowCompression: { slidingWindow: {} } 
+  };
+  if(CONFIG.OUTPUT_MODE === "AUDIO"){
+    setup.outputAudioTranscription = {};  
+  }
+  return { setup: setup };
+};
+
+LiveSession.prototype.connect = async function(token){
+  if(token) this.token = token;
+  if(!this.token) throw new Error("缺少連線憑證");
+  this.closing = false;
+  this.ready = false;
+  this.onState("connecting", this.handle ? "重新連線中…" : "連線中…");
+  var url = CONFIG.WS_BASE + "?access_token=" + encodeURIComponent(this.token);
+  var ws = new WebSocket(url);
+  this.ws = ws;
+  var self = this;
+  ws.onopen = function(){
+    ws.send(JSON.stringify(self.setupMessage()));
+  };
+  ws.onmessage = async function(ev){
+    var raw = ev.data;
+    if(raw instanceof Blob) raw = await raw.text();
+    var m;
+    try{ m = JSON.parse(raw); }catch(e){ return; }
+    self.handleServer(m);
+  };
+  ws.onerror = function(){
+    console.warn("[Live:"+self.key+"] WebSocket 錯誤");
+  };
+  ws.onclose = function(ev){
+    self.ready = false;
+    if(self.closing){ self.onState("closed", "已結束"); return; }
+    console.warn("[Live:"+self.key+"] 連線中斷", ev.code, ev.reason);
+    self.onState("down", "連線中斷，重連中…");
+    self.scheduleReconnect(ev);
+  };
+};
+
+LiveSession.prototype.handleServer = function(m){
+  var self = this;
+  if(m.setupComplete){
+    this.ready = true;
+    this.retry = 0;
+    this.onState("up", "已連線");
+    var q = this.queue; this.queue = [];
+    q.forEach(function(b){ self.sendPcm(b); });
+    return;
+  }
+  if(m.sessionResumptionUpdate){
+    if(m.sessionResumptionUpdate.resumable && m.sessionResumptionUpdate.newHandle){
+      this.handle = m.sessionResumptionUpdate.newHandle;
+    }
+    return;
+  }
+  if(m.goAway){
+    console.info("[Live:"+this.key+"] goAway，timeLeft=", m.goAway.timeLeft);
+    this.onState("connecting", "換線中…");
+    try{ this.ws.close(); }catch(e){}
+    return;
+  }
+  var sc = m.serverContent;
+  if(!sc) return;
+  if(!this.cur.at) this.cur.at = clockNow();
+  if(sc.inputTranscription && sc.inputTranscription.text){
+    this.cur.orig += sc.inputTranscription.text;
+  }
+  if(CONFIG.OUTPUT_MODE === "AUDIO"){
+    if(sc.outputTranscription && sc.outputTranscription.text){
+      this.cur.tran += sc.outputTranscription.text;
+    }
+  }else if(sc.modelTurn && sc.modelTurn.parts){
+    sc.modelTurn.parts.forEach(function(p){
+      if(p.text) self.cur.tran += p.text;
+    });
+  }
+  if(sc.inputTranscription || sc.outputTranscription || sc.modelTurn){
+    this.onTurn(this.snapshot(), false);
+  }
+  if(sc.turnComplete){
+    var snap = this.snapshot();
+    this.cur = { orig:"", tran:"", at:null };
+    if(snap.orig.trim() || snap.tran.trim()) this.onTurn(snap, true);
+  }
+};
+
+LiveSession.prototype.snapshot = function(){
+  return {
+    key: this.key,
+    at: this.cur.at || clockNow(),
+    orig: this.cur.orig.trim(),
+    tran: this.cur.tran.trim()
+  };
+};
+
+LiveSession.prototype.scheduleReconnect = function(ev){
+  var self = this;
+  this.retry++;
+  var fatal = ev && (ev.code === 1008 || ev.code === 1002 || ev.code === 1003);
+  if(fatal || this.retry > 12){
+    this.onState("fatal", "無法連線（" + (ev ? ev.code : "?") + "）");
+    App.onSessionFatal(this, ev);
+    return;
+  }
+  var wait = Math.min(CONFIG.RECONNECT_BASE_MS * Math.pow(1.7, this.retry-1), CONFIG.RECONNECT_MAX_MS);
+  setTimeout(async function(){
+    if(self.closing) return;
+    try{
+      var tok = await App.tokenFor(self.key, true);
+      await self.connect(tok);
+    }catch(e){
+      self.onState("down", "重連失敗，再試…");
+      self.scheduleReconnect(null);
+    }
+  }, wait);
+};
+
+LiveSession.prototype.sendPcm = function(buf){
+  if(!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.ready){
+    if(this.queue.length < 60) this.queue.push(buf);
+    return;
+  }
+  try{
+    this.ws.send(JSON.stringify({
+      realtimeInput: { audio: { data: abToB64(buf), mimeType: "audio/pcm;rate=16000" } }
+    }));
+  }catch(e){
+    console.warn("[Live:"+this.key+"] 送音失敗", e);
+  }
+};
+
+LiveSession.prototype.close = function(){
+  this.closing = true;
+  this.ready = false;
+  try{ if(this.ws) this.ws.close(); }catch(e){}
+};
+
+var App = {
+  mode: "onsite",
+  topic: "",
+  mineLang: "zh-TW",
+  theirsLang: "ko-KR",
+  sessionId: null,
+  audioCtx: null,
+  workletUrl: null,
+  micStream: null,
+  dispStream: null,
+  nodes: [],
+  sessions: {},
+  tokens: {},
+  tokenAt: 0,
+  glossaryStr: "",
+  glossaryCount: 0,
+  recorder: null,
+  recChunks: [],
+  recBlob: null,
+  turns: [],
+  startedAt: 0,
+  timer: null,
+  paused: false,
+  pausedMs: 0,
+  _pauseStart: 0,
+  running: false,
+  finalizing: false,
+  finalized: null,
+  shareSizePx: 30,
+
+  init: function(){
+    $("lnk-back").href = CONFIG.BACK_URL;
+    $("lnk-gloss").href = CONFIG.GLOSSARY_URL;
+    if(!window.WebSocket || !window.AudioWorkletNode){
+      showMsg("err", "<b>此瀏覽器不支援</b>　需要支援 AudioWorklet 與 WebSocket 的瀏覽器，請改用桌面版 Chrome 或 Edge。", "m-compat");
+      $("btn-start").disabled = true;
+    }
+    if(location.protocol !== "https:" && location.hostname !== "localhost"){
+      showMsg("err", "<b>必須在 HTTPS 下執行</b>　瀏覽器只在安全連線下開放麥克風與畫面分享。", "m-https");
+      $("btn-start").disabled = true;
+    }
+    if(CONFIG.API_TOKEN.indexOf("PUT_THE_SAME_TOKEN") === 0){
+      showMsg("warn", "<b>尚未設定 API_TOKEN</b>　請把 <code>CONFIG.API_TOKEN</code> 改成與後端 Script Property <code>MEETING_API_TOKEN</code> 相同的字串。", "m-token");
+    }
+    this.recoverDraft();
+    this.setMode("onsite");
+  },
+
+  recoverDraft: function(){
+    try{
+      var raw = localStorage.getItem(CONFIG.LS_KEY);
+      if(!raw) return;
+      var d = JSON.parse(raw);
+      if(!d || !d.turns || !d.turns.length) return;
+      var self = this;
+      var el = showMsg("warn",
+        "<b>發現上次未完成的逐字稿</b>（" + esc(d.topic || "未命名") + "，共 " + d.turns.length + " 句）" +
+        "<br><button type='button' class='btn btn-alt' style='margin-top:8px' id='btn-rec-dl'>⬇️ 下載該逐字稿</button>" +
+        " <button type='button' class='btn btn-alt' style='margin-top:8px' id='btn-rec-x'>丟棄</button>",
+        "m-draft");
+      $("btn-rec-dl").onclick = function(){
+        self.saveText(self.buildTranscript(d.turns, d), "逐字稿_救回_" + (d.topic||"會議") + ".txt");
+      };
+      $("btn-rec-x").onclick = function(){
+        localStorage.removeItem(CONFIG.LS_KEY);
+        clearMsg("m-draft");
+      };
+    }catch(e){ console.warn("草稿救回失敗", e); }
+  },
+
+  setMode: function(m){
+    this.mode = m;
+    $("mode-onsite").setAttribute("aria-pressed", String(m === "onsite"));
+    $("mode-online").setAttribute("aria-pressed", String(m === "online"));
+    $("online-note").classList.toggle("hidden", m !== "online");
+  },
+
+  mintTokens: async function(){
+    var need = (this.mode === "online") ? 2 : 1;
+    var res = await callGas({ action:"mintLiveToken", count: need, model: CONFIG.MODEL });
+    if(!res || !res.tokens || !res.tokens.length) throw new Error("後端沒有回傳憑證");
+    this.tokens = {};
+    if(this.mode === "online"){
+      this.tokens.mine   = res.tokens[0];
+      this.tokens.theirs = res.tokens[1] || res.tokens[0];
+    }else{
+      this.tokens.single = res.tokens[0];
+    }
+    if(res.glossary){
+      this.glossaryStr = res.glossary;
+      this.glossaryCount = res.glossaryCount || 0;
+    }
+    this.tokenAt = Date.now();
+  },
+
+  tokenFor: async function(key, force){
+    if(force || !this.tokens[key] || (Date.now() - this.tokenAt) > CONFIG.TOKEN_REFRESH_MS){
+      await this.mintTokens();
+    }
+    return this.tokens[key];
+  },
+
+  start: async function(){
+    var btn = $("btn-start");
+    btn.disabled = true;
+    btn.textContent = "⏳ 準備中…";
+    clearMsg("m-fail");
+    this.topic      = ($("in-topic").value || "").trim();
+    this.mineLang   = $("in-mine").value;
+    this.theirsLang = $("in-theirs").value;
+    this.sessionId  = "s" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+    try{
+      btn.textContent = "⏳ 取得連線憑證…";
+      await this.mintTokens();
+      btn.textContent = "⏳ 請求麥克風權限…";
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
+      });
+      if(this.mode === "online"){
+        btn.textContent = "⏳ 請選擇分頁並勾選音訊…";
+        this.dispStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,         
+          audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+        });
+        if(this.dispStream.getAudioTracks().length === 0){
+          this.dispStream.getTracks().forEach(function(t){ t.stop(); });
+          this.dispStream = null;
+          throw new Error("NO_TAB_AUDIO");
+        }
+        var self = this;
+        this.dispStream.getVideoTracks().forEach(function(t){
+          t.onended = function(){ self.onShareEnded(); };
+        });
+      }
+      btn.textContent = "⏳ 啟動音訊管線…";
+      await this.buildAudio();
+      btn.textContent = "⏳ 連線 Gemini Live…";
+      await this.openSessions();
+      this.startRecording();
+      this.running = true;
+      this.startedAt = Date.now();
+      this.turns = [];
+      $("scr-setup").classList.add("hidden");
+      $("scr-live").classList.remove("hidden");
+      $("row-theirs").classList.toggle("hidden", this.mode !== "online");
+      $("st-gloss").textContent = this.glossaryCount ? (this.glossaryCount + " 筆") : "未設定";
+      $("share-title").textContent = this.topic || "會議即時翻譯";
+      this.setRec(true);
+      this.tick();
+      this.timer = setInterval(this.tick.bind(this), 1000);
+      window.addEventListener("beforeunload", this.guard);
+    }catch(err){
+      console.error("啟動失敗", err);
+      this.teardownAudio();
+      btn.disabled = false;
+      btn.textContent = "▶️ 開始收音";
+      this.explainStartError(err);
+    }
+  },
+
+  explainStartError: function(err){
+    var name = err && err.name, msg = String((err && err.message) || err);
+    if(msg === "NO_TAB_AUDIO"){
+      showMsg("err", "<b>沒有取得分頁音訊</b>　你選擇了畫面來源，但沒有勾選「同時分享分頁音訊」。" +
+        "請再按一次開始收音，在選擇器裡選<b>「分頁」</b>並勾選左下角的音訊選項。" +
+        "若你選的是「整個螢幕」，請注意 macOS 上的 Chrome 無法擷取系統音訊。", "m-fail");
+    }else if(name === "NotAllowedError" || name === "PermissionDeniedError"){
+      showMsg("err", "<b>權限被拒絕</b>　請點網址列左側的鎖頭圖示，把麥克風設為「允許」，" +
+        "或在畫面分享的選擇器裡按「分享」而不是「取消」。", "m-fail");
+    }else if(name === "NotFoundError"){
+      showMsg("err", "<b>找不到麥克風</b>　請確認麥克風已接上且未被其他程式佔用。", "m-fail");
+    }else{
+      showMsg("err", "<b>啟動失敗</b>　" + esc(msg) +
+        "<br><span style='color:#c99'>若訊息提到後端或憑證，請先確認 Apps Script 已部署、" +
+        "Script Properties 的 GEMINI_API_KEY 與 MEETING_API_TOKEN 都已設定。</span>", "m-fail");
+    }
+  },
+
+  onShareEnded: function(){
+    if(!this.running) return;
+    showMsg("warn", "<b>畫面分享已停止</b>　對方通道的收音已中斷，我方麥克風仍在錄。" +
+      "若要繼續收對方聲音，請結束本次會議後重新開始。", "m-shareend");
+    var s = this.sessions.theirs;
+    if(s) s.close();
+    this.setConn("theirs", "off", "分享已停止");
+  },
+
+  buildAudio: async function(){
+    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(this.audioCtx.state === "suspended") await this.audioCtx.resume();
+    this.workletUrl = URL.createObjectURL(new Blob([WORKLET_SRC], { type:"application/javascript" }));
+    await this.audioCtx.audioWorklet.addModule(this.workletUrl);
+    var self = this;
+    var mute = this.audioCtx.createGain();
+    mute.gain.value = 0;
+    mute.connect(this.audioCtx.destination);
+
+    function attach(stream, sessionKey){
+      var src = self.audioCtx.createMediaStreamSource(stream);
+      var node = new AudioWorkletNode(self.audioCtx, "pcm16k");
+      node.port.onmessage = function(ev){
+        if(self.paused || !self.running) return;
+        var s = self.sessions[sessionKey];
+        if(s) s.sendPcm(ev.data);
+      };
+      src.connect(node);
+      node.connect(mute);
+      self.nodes.push(src, node);
+    }
+    if(this.mode === "online"){
+      attach(this.micStream,  "mine");
+      attach(this.dispStream, "theirs");
+    }else{
+      attach(this.micStream,  "single");
+    }
+  },
+
+  teardownAudio: function(){
+    this.nodes.forEach(function(n){ try{ n.disconnect(); }catch(e){} });
+    this.nodes = [];
+    [this.micStream, this.dispStream].forEach(function(s){
+      if(s) s.getTracks().forEach(function(t){ t.stop(); });
+    });
+    this.micStream = this.dispStream = null;
+    if(this.audioCtx){ try{ this.audioCtx.close(); }catch(e){} this.audioCtx = null; }
+    if(this.workletUrl){ URL.revokeObjectURL(this.workletUrl); this.workletUrl = null; }
+  },
+
+  openSessions: async function(){
+    var self = this;
+    var defs = [];
+    if(this.mode === "online"){
+      defs.push({ key:"mine",   label:"我方", srcLang:this.mineLang,   dstLang:this.theirsLang });
+      defs.push({ key:"theirs", label:"對方", srcLang:this.theirsLang, dstLang:this.mineLang });
+    }else{
+      defs.push({ key:"single", label:"會議室", srcLang:null, dstLang:this.theirsLang });
+    }
+    this.sessions = {};
+    for(var i=0;i<defs.length;i++){
+      var d = defs[i];
+      var s = new LiveSession({
+        key: d.key, label: d.label,
+        srcLang: d.srcLang, dstLang: d.dstLang, mineLang: this.mineLang,
+        glossary: this.glossaryStr,
+        onTurn:  function(snap, isFinal){ self.onTurn(snap, isFinal); },
+        onState: (function(k){ return function(st, txt){ self.onSessionState(k, st, txt); }; })(d.key)
+      });
+      this.sessions[d.key] = s;
+      await s.connect(this.tokens[d.key]);
+    }
+  },
+
+  onSessionState: function(key, st, txt){
+    var uiKey = (key === "theirs") ? "theirs" : "mine";
+    var map = { up:"on", connecting:"wait", down:"wait", fatal:"off", closed:"off" };
+    this.setConn(uiKey, map[st] || "wait", txt);
+    var any = Object.keys(this.sessions).some(function(k){ return this.sessions[k].ready; }, this);
+    if(this.running) this.setRec(any);
+  },
+
+  onSessionFatal: function(s, ev){
+    showMsg("err",
+      "<b>" + esc(s.label) + "通道連線失敗</b>（代碼 " + (ev ? ev.code : "?") + "）。" +
+      "常見原因：模型 ID <code>" + esc(CONFIG.MODEL) + "</code> 不存在或帳號無權限、" +
+      "<code>OUTPUT_MODE</code> 設定不被此模型接受、憑證逾期。" +
+      "<br>錄音仍在進行，會議結束後仍可用錄音檔補做紀錄。", "m-fatal-" + s.key);
+  },
+
+  setConn: function(which, cls, txt){
+    var dot = $("dot-" + which), st = $("st-" + which);
+    if(dot) dot.className = "dot " + cls;
+    if(st) st.textContent = txt;
+  },
+
+  setRec: function(on){
+    var d = $("rec-dot"), t = $("rec-txt");
+    var sd = $("share-dot"), sst = $("share-st");
+    if(this.paused){
+      d.className = "dot off"; t.textContent = "已暫停";
+      sd.className = "dot off"; sst.textContent = "已暫停";
+      return;
+    }
+    d.className  = "dot " + (on ? "on" : "wait");
+    t.textContent = on ? "收音分析中…" : "連線中…";
+    sd.className = "dot " + (on ? "on" : "wait");
+    sst.textContent = on ? "即時翻譯中" : "連線中…";
+  },
+
+  onTurn: function(snap, isFinal){
+    var ph = $("feed").querySelector(".empty");
+    if(ph) ph.remove();
+    var interimId = "interim-" + snap.key;
+    var old = $(interimId);
+    if(old) old.remove();
+    if(!isFinal){
+      if(!snap.orig && !snap.tran) return;
+      $("feed").appendChild(this.turnEl(snap, true, interimId));
+      this.scrollFeed();
+      return;
+    }
+    this.turns.push(snap);
+    $("feed").appendChild(this.turnEl(snap, false, null));
+    this.scrollFeed();
+    $("st-turns").textContent = String(this.turns.length);
+    this.pushShare(snap);
+    this.persist();
+  },
+
+  turnEl: function(snap, interim, id){
+    var mine = (snap.key !== "theirs");
+    var who, flag;
+    if(this.mode === "online"){
+      who  = mine ? "我方" : "韓方";
+      flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || "";
+    }else{
+      who = "會議室"; flag = "🎙️";
+    }
+    var el = document.createElement("div");
+    el.className = "turn " + (mine ? "mine" : "theirs") + (interim ? " interim" : "");
+    if(id) el.id = id;
+    var h = '<div class="turn-h"><span class="who">' + flag + " " + esc(who) +
+            '</span><span class="ts">' + esc(snap.at) + '</span>' +
+            (interim ? '<span class="ts">辨識中…</span>' : '') + '</div>';
+    if(snap.orig) h += '<div class="orig">' + esc(snap.orig) + '</div>';
+    if(snap.tran) h += '<div class="tran">' + esc(snap.tran) + '</div>';
+    el.innerHTML = h;
+    return el;
+  },
+
+  scrollFeed: function(){
+    var f = $("feed");
+    if(f.scrollHeight - f.scrollTop - f.clientHeight < 160) f.scrollTop = f.scrollHeight;
+  },
+
+  persist: function(){
+    try{
+      localStorage.setItem(CONFIG.LS_KEY, JSON.stringify({
+        sessionId: this.sessionId, topic: this.topic,
+        mode: this.mode, mineLang: this.mineLang, theirsLang: this.theirsLang,
+        savedAt: new Date().toISOString(), turns: this.turns
+      }));
+    }catch(e){ console.warn("localStorage 寫入失敗", e); }
+  },
+
+  pushShare: function(snap){
+    var mine = (snap.key !== "theirs");
+    var aText, bText;
+    if(this.mode === "online"){
+      if(mine){ aText = snap.orig; bText = snap.tran; }
+      else    { aText = snap.tran; bText = snap.orig; }
+    }else{
+      var isKo = /[가-힣ᄀ-ᇿ㄰-㆏]/.test(snap.orig);
+      if(isKo){ aText = snap.tran; bText = snap.orig; }
+      else    { aText = snap.orig; bText = snap.tran; }
+    }
+    this.appendShare("share-a", aText);
+    this.appendShare("share-b", bText);
+  },
+
+  appendShare: function(boxId, text){
+    if(!text) return;
+    var box = $(boxId);
+    var d = document.createElement("div");
+    d.className = "share-line";
+    d.textContent = text;
+    box.appendChild(d);
+    while(box.children.length > 6) box.removeChild(box.firstChild);
+    for(var i=0;i<box.children.length;i++){
+      box.children[i].classList.toggle("dim", i < box.children.length - 2);
+    }
+    box.scrollTop = box.scrollHeight;
+  },
+
+  openShare: function(){ $("share").classList.remove("hidden"); this.applyShareSize(); },
+  closeShare: function(){ $("share").classList.add("hidden"); },
+  shareSize: function(d){ this.shareSizePx = Math.max(16, Math.min(72, this.shareSizePx + d)); this.applyShareSize(); },
+  applyShareSize: function(){ $("share").style.setProperty("--sharesize", this.shareSizePx + "px"); },
+
+  tick: function(){
+    if(!this.running) return;
+    if(!this.paused) $("st-time").textContent = mmss(Date.now() - this.startedAt - (this.pausedMs||0));
+  },
+
+  togglePause: function(){
+    this.paused = !this.paused;
+    $("btn-pause").textContent = this.paused ? "▶️ 繼續" : "⏸️ 暫停";
+    if(this.paused){
+      this._pauseStart = Date.now();
+      if(this.recorder && this.recorder.state === "recording") this.recorder.pause();
+    }else{
+      this.pausedMs = (this.pausedMs||0) + (Date.now() - this._pauseStart);
+      if(this.recorder && this.recorder.state === "paused") this.recorder.resume();
+    }
+    this.setRec(true);
+  },
+
+  guard: function(e){
+    e.preventDefault();
+    e.returnValue = "會議仍在收音中，離開會遺失尚未存檔的逐字稿。";
+    return e.returnValue;
+  },
+
+  startRecording: function(){
+    try{
+      if(!window.MediaRecorder) return;
+      var dest = this.audioCtx.createMediaStreamDestination();
+      var self = this;
+      [this.micStream, this.dispStream].forEach(function(s){
+        if(!s || s.getAudioTracks().length === 0) return;
+        self.audioCtx.createMediaStreamSource(s).connect(dest);
+      });
+      var mime = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus"]
+        .find(function(m){ return MediaRecorder.isTypeSupported(m); });
+      this.recorder = new MediaRecorder(dest.stream, mime ? { mimeType: mime } : undefined);
+      this.recChunks = [];
+      this.recorder.ondataavailable = function(ev){ if(ev.data && ev.data.size) self.recChunks.push(ev.data); };
+      this.recorder.start(5000);
+    }catch(e){
+      console.warn("錄音啟動失敗（不影響即時字幕）", e);
+    }
+  },
+
+  stopRecording: function(){
+    var self = this;
+    return new Promise(function(resolve){
+      if(!self.recorder || self.recorder.state === "inactive"){ resolve(null); return; }
+      self.recorder.onstop = function(){
+        self.recBlob = new Blob(self.recChunks, { type: self.recorder.mimeType || "audio/webm" });
+        resolve(self.recBlob);
+      };
+      try{ self.recorder.stop(); }catch(e){ resolve(null); }
+    });
+  },
+
+  stop: async function(){
+    if(!this.running) return;
+    $("btn-stop").disabled = true;
+    $("btn-stop").textContent = "⏳ 收尾中…";
+    this.running = false;
+    window.removeEventListener("beforeunload", this.guard);
+    clearInterval(this.timer);
+    this.closeShare();
+    await new Promise(function(r){ setTimeout(r, 1800); });
+    Object.keys(this.sessions).forEach(function(k){ this.sessions[k].close(); }, this);
+    await this.stopRecording();
+    this.teardownAudio();
+    $("scr-live").classList.add("hidden");
+    $("scr-done").classList.remove("hidden");
+    $("btn-dl-audio").disabled = !this.recBlob;
+    await this.finalize();
+  },
+
+  finalize: async function(){
+    if(this.finalizing) return;
+    if(this.finalized){ this.renderDone(this.finalized); return; }
+    this.finalizing = true;
+    $("btn-retry").disabled = true;
+    if(!this.turns.length){
+      $("done-status").className = "msg msg-warn";
+      $("done-status").innerHTML = "<div><b>沒有收到任何有效發言</b>　沒有逐字稿可以建檔。" +
+        (this.recBlob ? "錄音備份仍可下載，可事後用錄音檔補做紀錄。" : "") + "</div>";
+      this.finalizing = false;
+      return;
+    }
+    $("done-status").className = "msg msg-info";
+    $("done-status").innerHTML = "<div>⏳ 正在彙整待辦並建立 Google Doc…</div>";
+    try{
+      var res = await callGas({
+        action: "finalizeMeeting",
+        sessionId: this.sessionId,
+        meetingDate: isoDate(new Date()),
+        topic: this.topic,
+        mode: this.mode,
+        durationSec: Math.round((Date.now() - this.startedAt - (this.pausedMs||0)) / 1000),
+        transcript: this.buildTranscript(this.turns, this)
+      }, { tries: 3, timeoutMs: 120000 });
+      this.finalized = res;
+      localStorage.removeItem(CONFIG.LS_KEY);
+      this.renderDone(res);
+    }catch(err){
+      console.error("建檔失敗", err);
+      $("done-status").className = "msg msg-err";
+      $("done-status").innerHTML = "<div><b>建檔失敗</b>　" + esc(String(err.message || err)) +
+        "<br>逐字稿還在，沒有遺失。請按「下載逐字稿」保存一份，再按「重試建檔」。</div>";
+      $("btn-retry").disabled = false;
+    }
+    this.finalizing = false;
+  },
+
+  renderDone: function(res){
+    $("done-status").className = "msg msg-info";
+    $("done-status").innerHTML = "<div>✅ 會議紀錄已建立" +
+      (res.reused ? "（沿用先前已建立的文件，未重複建檔）" : "") + "</div>";
+    var box = $("done-links");
+    box.innerHTML = "";
+    if(res.url){
+      var a = document.createElement("a");
+      a.className = "doclink"; a.href = res.url; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "📄 開啟會議紀錄";
+      box.appendChild(a);
+    }
+    this.renderTasks(res.tasks || []);
+  },
+
+  renderTasks: function(tasks){
+    var box = $("tasks");
+    box.innerHTML = "";
+    if(!Array.isArray(tasks) || !tasks.length){
+      box.innerHTML = '<div class="empty" style="padding:24px 12px">本次會議無明確待辦</div>';
+      return;
+    }
+    tasks.forEach(function(t){
+      var d = document.createElement("div");
+      d.className = "task";
+      var n = document.createElement("div");
+      n.className = "task-n";
+      n.textContent = t.taskName || "未命名任務";     // textContent，不用 innerHTML（原報告 UX-8）
+      var m = document.createElement("div");
+      m.className = "task-m";
+      var u = document.createElement("span"); u.textContent = "👤 " + (t.unit || "未定");
+      var dd = document.createElement("span"); dd.textContent = "⏳ " + (t.dueDate || "未定");
+      m.appendChild(u); m.appendChild(dd);
+      d.appendChild(n); d.appendChild(m);
+      box.appendChild(d);
+    });
+  },
+
+  buildTranscript: function(turns, meta){
+    var head = [
+      "會議主題：" + (meta.topic || "（未填）"),
+      "會議形式：" + (meta.mode === "online" ? "線上會議（雙軌收音）" : "現場實體會議（單軌收音）"),
+      "語言：" + (LANG_NAME[meta.mineLang] || meta.mineLang) + " ／ " + (LANG_NAME[meta.theirsLang] || meta.theirsLang),
+      "產生時間：" + new Date().toLocaleString("zh-TW"),
+      "共 " + turns.length + " 句",
+      "", "----------------------------------------", ""
+    ].join("\n");
+    var body = turns.map(function(t){
+      var who;
+      if(meta.mode === "online") who = (t.key === "theirs") ? "對方" : "我方";
+      else who = "會議室";
+      var s = "[" + t.at + "] " + who + "\n";
+      if(t.orig) s += "  原文：" + t.orig + "\n";
+      if(t.tran) s += "  譯文：" + t.tran + "\n";
+      return s;
+    }).join("\n");
+    return head + body;
+  },
+
+  saveText: function(text, filename){
+    var blob = new Blob([text], { type:"text/plain;charset=utf-8" });
+    this.saveBlob(blob, filename);
+  },
+
+  saveBlob: function(blob, filename){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  },
+
+  downloadTranscript: function(){
+    if(!this.turns.length){ alert("目前還沒有逐字稿內容。"); return; }
+    var name = "逐字稿_" + isoDate(new Date()) + "_" + (this.topic || "會議") + ".txt";
+    this.saveText(this.buildTranscript(this.turns, this), name);
+  },
+
+  downloadAudio: function(){
+    if(!this.recBlob){ alert("沒有錄音備份可下載。"); return; }
+    var ext = (this.recBlob.type.indexOf("ogg") >= 0) ? "ogg" : "webm";
+    this.saveBlob(this.recBlob, "錄音_" + isoDate(new Date()) + "_" + (this.topic || "會議") + "." + ext);
+  }
+};
+document.addEventListener("DOMContentLoaded", function(){ App.init(); });
+</script>
 </body>
 </html>
