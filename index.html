@@ -613,6 +613,25 @@ LiveSession.prototype.close = function(){
   try{ if(this.ws) this.ws.close(); }catch(e){}
 };
 
+function getUrlQueryParams() {
+  var params = {};
+  try {
+    var search = window.location.search;
+    if (!search && window.location.hash.includes('?')) {
+      search = '?' + window.location.hash.split('?')[1];
+    }
+    if (search) {
+      var urlParams = new URLSearchParams(search);
+      urlParams.forEach(function(val, key) {
+        params[key] = val;
+      });
+    }
+  } catch(e) {
+    console.warn("解析 URL 網址參數失敗:", e);
+  }
+  return params;
+}
+
 var App = {
   mode: "onsite",
   topic: "",
@@ -647,10 +666,9 @@ var App = {
   init: function(){
     $("lnk-back").href = CONFIG.BACK_URL;
     $("lnk-gloss").href = CONFIG.GLOSSARY_URL;
-    var gasParams = window.GAS_QUERY_PARAMS || {};
-    var urlParams = new URLSearchParams(window.location.search);
-    var view = gasParams.view || urlParams.get('view');
-    var s = gasParams.s || urlParams.get('s');
+    var params = getUrlQueryParams();
+    var view = params.view;
+    var s = params.s;
     if (view === 'share') {
       this.startViewerMode(s);
       return;
