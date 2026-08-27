@@ -441,23 +441,25 @@ LiveSession.prototype.systemPrompt = function(){
   var mine = LANG_NAME[this.mineLang] || "繁體中文";
   var dst = LANG_NAME[this.dstLang] || "繁體中文";
   var lines = [];
-
-  lines.push("你是資深極速即時會議口譯與聽寫員。你將持續收到即時會議語音串流。");
+  lines.push("你是資深極速即時會議口譯員與聽寫員。你目前正處於一場嚴格僅限『繁體中文』、『韓文』與『英文』的三語會議中。");
   lines.push("");
-  lines.push("【核心工作任務與分流邏輯】：");
-  lines.push("1. 【極速輸出】：收到語音後，請『立即、即時』輸出文字內容，絕不要等待講者停頓或長句結束。");
-  lines.push("2. 【中文/英文】：若聽到的是『繁體中文』或『英文』，請直接進行極速語音轉文字（聽寫），精準還原原文。");
-  lines.push("3. 【外語翻譯】：若聽到的是『韓文』、『日文』或其他外語，請『立即翻譯』成精練的【繁體中文】。");
+  lines.push("【最高語言邊界限制（嚴禁幻聽與異國語言）】：");
+  lines.push("1. 本會議『只允許輸出繁體中文、韓文與英文』。");
+  lines.push("2. 絕對嚴格禁止輸出任何其他國家語言（如西班牙文、法文、德文、日文、越南文等）！");
+  lines.push("3. 若環境存在噪音、咳嗽或低語導致音訊模糊，嚴禁猜測或幻聽成西班牙文等外語，請直接輸出空白。");
+  lines.push("4. 所有中文產出必須 100% 嚴格使用『繁體中文（台灣標準正體）』！嚴禁出現簡體字。");
   lines.push("");
-  lines.push("【字體與格式嚴格限制】：");
-  lines.push("1. 必須 100% 嚴格使用『繁體中文（台灣正體）』！絕對禁止出現任何簡體字（如：国、国、译、写、这等）！");
-  lines.push("2. 只輸出聽寫/譯文結果本身。嚴禁加上任何前綴（如：不要寫「翻譯：」、「原文：」）、不要加引號，亦不要說明你在做什麼。");
-  lines.push("3. 英文專有名詞、產品代號、縮寫（如 MAU、ARPPU、Ontime、GM）一律保留原文，勿翻譯。");
-  lines.push("4. 若這一段只有靜音、雜音、咳嗽或無意義語助詞，請輸出空白，勿編造內容。");
-
+  lines.push("【極速微句斷句（1~2句即時呈現）】：");
+  lines.push("1. 【微句切分】：講者每講完 1 至 2 個短句（約 5~15 個字），必須『立刻輸出』並斷句！");
+  lines.push("2. 絕對禁止囤積超過 2 句以上才一次性吐出，必須保持極高的即時字幕呈現頻率。");
+  lines.push("");
+  lines.push("【翻譯與聽寫分流】：");
+  lines.push("1. 聽到繁體中文或英文：直接進行極速語音轉文字（聽寫原文）。");
+  lines.push("2. 聽到韓文：立即翻譯成精練的繁體中文。");
+  lines.push("3. 只輸出譯文/聽寫結果本身，不要加任何前綴（如「翻譯：」）、不要說明你在做什麼。");
   if(this.glossary){
     lines.push("");
-    lines.push("【術語對照表（必須強制遵循）】：");
+    lines.push("【術語對照表】：");
     lines.push(this.glossary);
   }
   return lines.join("\n");
@@ -638,11 +640,13 @@ var App = {
   finalized: null,
   shareSizePx: 30,
 
-  init: function(){
+  App.init = function(){
     $("lnk-back").href = CONFIG.BACK_URL;
     $("lnk-gloss").href = CONFIG.GLOSSARY_URL;
-    if (window.BroadcastChannel) {
-      this.bc = new BroadcastChannel(SHARE_CHANNEL_NAME);
+    var urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('view') === 'share') {
+      this.startViewerMode(urlParams.get('s'));
+      return;
     }
     if (window.self !== window.top) {
       showMsg("warn",
@@ -665,7 +669,7 @@ var App = {
     }
     this.recoverDraft();
     this.setMode("onsite");
-  },
+  };
 
   recoverDraft: function(){
     try{
@@ -986,7 +990,7 @@ var App = {
     }catch(e){ console.warn("localStorage 寫入失敗", e); }
   },
 
-  pushShare: function(snap){
+  App.pushShare = function(snap){
     var isForeign = this.isForeignSpeaker(snap);
     var aText, bText;
     if (isForeign) {
@@ -998,14 +1002,77 @@ var App = {
     }
     this.appendShare("share-a", aText);
     this.appendShare("share-b", bText);
-    if (this.bc) {
-      this.bc.postMessage({
-        type: 'NEW_TURN',
-        aText: aText,
-        bText: bText
+    var self = this;
+    if (this._pushTimer) clearTimeout(this._pushPushTimer);
+    this._pushTimer = setTimeout(function(){
+      var linesA = [], linesB = [];
+      self.turns.forEach(function(t){
+        var foreign = self.isForeignSpeaker(t);
+        linesA.push(foreign ? (t.tran || t.orig) : t.orig);
+        linesB.push(foreign ? t.orig : (t.tran || t.orig));
       });
-    }
-  },
+      callGas({
+        action: 'pushShareState',
+        sessionId: self.sessionId,
+        topic: self.topic,
+        linesA: linesA,
+        linesB: linesB
+      }, { tries: 1 }).catch(function(e){ console.warn("雲端廣播推送微失敗:", e); });
+    }, 800);
+  };
+
+  App.copyShareUrl = function(){
+    var baseUrl = window.location.href.split('?')[0];
+    var shareUrl = baseUrl + '?view=share&s=' + (this.sessionId || ''); 
+    navigator.clipboard.writeText(shareUrl).then(function(){
+      alert("✅ 已複製同仁觀看連結！您可以將此連結發送給其他夥伴：\n\n" + shareUrl);
+    }).catch(function(){
+      prompt("請手動複製以下觀看連結發給同仁：", shareUrl);
+    });
+  };
+
+  App.startViewerMode = function(sessionId){
+    document.body.innerHTML = `
+      <div style="background:#04070e; min-h-screen; color:#e2e8f0; font-family:system-ui,sans-serif;" class="min-h-screen flex flex-col">
+        <div class="flex justify-between items-center p-4 bg-slate-900 border-b border-slate-800">
+          <div class="text-lg font-bold text-blue-200" id="viewer-topic">📡 即時會議字幕同步中…</div>
+          <div class="text-xs text-emerald-400 font-mono animate-pulse">● Live 聯播中</div>
+        </div>
+        <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-1 bg-slate-800">
+          <div class="bg-black p-6 overflow-y-auto flex flex-col justify-end" id="box-a"></div>
+          <div class="bg-black p-6 overflow-y-auto flex flex-col justify-end" id="box-b"></div>
+        </div>
+      </div>
+    `;
+
+    var poll = function(){
+      callGas({ action: 'getShareState', sessionId: sessionId }, { tries: 1 })
+        .then(function(res){
+          if (res && res.data) {
+            if (res.data.topic) $("viewer-topic").textContent = "🎙️ " + res.data.topic;
+            var boxA = $("box-a"), boxB = $("box-b");
+            boxA.innerHTML = ""; boxB.innerHTML = "";       
+            (res.data.linesA || []).forEach(function(txt){
+              var d = document.createElement("div");
+              d.className = "text-2xl font-medium my-2 text-blue-200 leading-relaxed";
+              d.textContent = txt;
+              boxA.appendChild(d);
+            });
+            (res.data.linesB || []).forEach(function(txt){
+              var d = document.createElement("div");
+              d.className = "text-2xl font-medium my-2 text-yellow-300 leading-relaxed";
+              d.textContent = txt;
+              boxB.appendChild(d);
+            });
+            boxA.scrollTop = boxA.scrollHeight;
+            boxB.scrollTop = boxB.scrollHeight;
+          }
+        })
+        .catch(function(e){ console.warn("輪詢廣播失敗:", e); });
+    };
+    poll();
+    setInterval(poll, 1500); 
+  };
 
   appendShare: function(boxId, text){
     if(!text) return;
