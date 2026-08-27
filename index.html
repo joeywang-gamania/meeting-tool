@@ -129,7 +129,6 @@ input[type=text],select{
   <div class="top">
     <div>
       <h1><span>🎙️</span> 會議即時翻譯與紀錄</h1>
-      <div class="tag">Gemini Live 即時串流 · 中韓雙向 · 英文術語保留</div>
     </div>
     <div class="links">
       <a class="lnk" id="lnk-back" href="#" target="_top">↩ 返回專案追蹤</a>
@@ -268,6 +267,7 @@ input[type=text],select{
   </div>
 </div>
 <script>
+const SHARE_CHANNEL_NAME = "meeting_live_share_channel";
 "use strict";
 /* ============================================================================
    設定區 —— 部署時只需要改這一段
@@ -641,16 +641,27 @@ var App = {
   init: function(){
     $("lnk-back").href = CONFIG.BACK_URL;
     $("lnk-gloss").href = CONFIG.GLOSSARY_URL;
+    if (window.BroadcastChannel) {
+      this.bc = new BroadcastChannel(SHARE_CHANNEL_NAME);
+    }
+    if (window.self !== window.top) {
+      showMsg("warn",
+        "<b>⚠️ 偵測到您目前處於內嵌預覽視窗 (iframe) 中！</b><br>" +
+        "瀏覽器預設封鎖內嵌頁面的麥克風權限。<br>" +
+        "<button type='button' class='btn btn-alt' style='margin-top:8px; background:#2563eb; border-color:#3b82f6; color:#fff; font-weight:bold;' onclick='window.open(location.href, \"_blank\")'>🚀 點此開啟獨立全新分頁測試</button>",
+        "m-iframe-warn"
+      );
+    }
     if(!window.WebSocket || !window.AudioWorkletNode){
-      showMsg("err", "<b>此瀏覽器不支援</b>　需要支援 AudioWorklet 與 WebSocket 的瀏覽器，請改用桌面版 Chrome 或 Edge。", "m-compat");
+      showMsg("err", "<b>此瀏覽器不支援</b> 需要支援 AudioWorklet 與 WebSocket 的瀏覽器，請改用桌面版 Chrome 或 Edge。", "m-compat");
       $("btn-start").disabled = true;
     }
     if(location.protocol !== "https:" && location.hostname !== "localhost"){
-      showMsg("err", "<b>必須在 HTTPS 下執行</b>　瀏覽器只在安全連線下開放麥克風與畫面分享。", "m-https");
+      showMsg("err", "<b>必須在 HTTPS 下執行</b> 瀏覽器只在安全連線下開放麥克風與畫面分享。", "m-https");
       $("btn-start").disabled = true;
     }
     if(CONFIG.API_TOKEN.indexOf("PUT_THE_SAME_TOKEN") === 0){
-      showMsg("warn", "<b>尚未設定 API_TOKEN</b>　請把 <code>CONFIG.API_TOKEN</code> 改成與後端 Script Property <code>MEETING_API_TOKEN</code> 相同的字串。", "m-token");
+      showMsg("warn", "<b>尚未設定 API_TOKEN</b> 請把 <code>CONFIG.API_TOKEN</code> 改成與後端 Script Property <code>MEETING_API_TOKEN</code> 相同的字串。", "m-token");
     }
     this.recoverDraft();
     this.setMode("onsite");
@@ -922,14 +933,11 @@ var App = {
   },
 
   updateTurnEl: function(el, snap, interim) {
-    var mine = (snap.key !== "theirs");
-    var who, flag;
-    if(this.mode === "online"){
-      who  = mine ? "我方" : "韓方";
-      flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || "";
-    }else{
-      who = "會議室"; flag = "🎙️";
-    }
+    var isForeign = this.isForeignSpeaker(snap);
+    var mine = !isForeign;
+    var who = mine ? "我方" : "韓方";
+    var flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || (mine ? "🇹🇼" : "🇰🇷");
+    el.className = "turn " + (mine ? "mine" : "theirs") + (interim ? " interim" : "");
     var h = '<div class="turn-h"><span class="who">' + flag + " " + esc(who) +
             '</span><span class="ts">' + esc(snap.at) + '</span>' +
             (interim ? '<span class="ts text-yellow-400 font-bold animate-pulse">辨識中…</span>' : '') + '</div>';
@@ -940,21 +948,23 @@ var App = {
     }
   },
 
+  isForeignSpeaker: function(snap) {
+    var text = (snap.orig || "").trim();
+    if (!text) return false;
+    return /[가-힣ᄀ-ᇿぁ-ゔァ-ヴー]/.test(text);
+  },
+
   turnEl: function(snap, interim, id){
-    var mine = (snap.key !== "theirs");
-    var who, flag;
-    if(this.mode === "online"){
-      who  = mine ? "我方" : "韓方";
-      flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || "";
-    }else{
-      who = "會議室"; flag = "🎙️";
-    }
+    var isForeign = this.isForeignSpeaker(snap);
+    var mine = !isForeign;     
+    var who = mine ? "我方" : "韓方";
+    var flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || (mine ? "🇹🇼" : "🇰🇷");
     var el = document.createElement("div");
     el.className = "turn " + (mine ? "mine" : "theirs") + (interim ? " interim" : "");
     if(id) el.id = id;
     var h = '<div class="turn-h"><span class="who">' + flag + " " + esc(who) +
             '</span><span class="ts">' + esc(snap.at) + '</span>' +
-            (interim ? '<span class="ts">辨識中…</span>' : '') + '</div>';
+            (interim ? '<span class="ts text-yellow-400 font-bold animate-pulse">辨識中…</span>' : '') + '</div>';
     if(snap.orig) h += '<div class="orig">' + esc(snap.orig) + '</div>';
     if(snap.tran) h += '<div class="tran">' + esc(snap.tran) + '</div>';
     el.innerHTML = h;
@@ -977,18 +987,24 @@ var App = {
   },
 
   pushShare: function(snap){
-    var mine = (snap.key !== "theirs");
+    var isForeign = this.isForeignSpeaker(snap);
     var aText, bText;
-    if(this.mode === "online"){
-      if(mine){ aText = snap.orig; bText = snap.tran; }
-      else    { aText = snap.tran; bText = snap.orig; }
-    }else{
-      var isKo = /[가-힣ᄀ-ᇿ㄰-㆏]/.test(snap.orig);
-      if(isKo){ aText = snap.tran; bText = snap.orig; }
-      else    { aText = snap.orig; bText = snap.tran; }
+    if (isForeign) {
+      aText = snap.tran || snap.orig;
+      bText = snap.orig;
+    } else {
+      aText = snap.orig;
+      bText = snap.tran || snap.orig;
     }
     this.appendShare("share-a", aText);
     this.appendShare("share-b", bText);
+    if (this.bc) {
+      this.bc.postMessage({
+        type: 'NEW_TURN',
+        aText: aText,
+        bText: bText
+      });
+    }
   },
 
   appendShare: function(boxId, text){
@@ -1005,9 +1021,142 @@ var App = {
     box.scrollTop = box.scrollHeight;
   },
 
-  openShare: function(){ $("share").classList.remove("hidden"); this.applyShareSize(); },
-  closeShare: function(){ $("share").classList.add("hidden"); },
+  openShare: function(){
+    var self = this;
+    if (this.shareWin && !this.shareWin.closed) {
+      this.shareWin.focus();
+      return;
+    }
+    var win = window.open("", "LiveShareWindow", "width=1100,height=750,menubar=no,toolbar=no,status=no");
+    if (!win) {
+      alert("彈出視窗被瀏覽器攔截，請允許本網站開啟彈出視窗！");
+      return;
+    }
+    this.shareWin = win;
+    win.document.open();
+    win.document.write(self.buildShareWindowHtml());
+    win.document.close();
+    setTimeout(function(){
+      self.syncShareWindowFull();
+    }, 300);
+  },
+
+  closeShare: function(){
+    if (this.shareWin && !this.shareWin.closed) {
+      this.shareWin.close();
+    }
+    this.shareWin = null;
+  },
+
+  syncShareWindowFull: function(){
+    if (!this.bc) return;
+    var self = this;
+    var linesA = [];
+    var linesB = [];
+    this.turns.forEach(function(snap){
+      var isForeign = self.isForeignSpeaker(snap);
+      if (isForeign) {
+        linesA.push(snap.tran || snap.orig);
+        linesB.push(snap.orig);
+      } else {
+        linesA.push(snap.orig);
+        linesB.push(snap.tran || snap.orig);
+      }
+    });
+    this.bc.postMessage({
+      type: 'INIT_SYNC',
+      topic: this.topic || '會議即時翻譯',
+      linesA: linesA,
+      linesB: linesB
+    });
+  },
+
+  buildShareWindowHtml: function(){
+      return `<!DOCTYPE html>
+  <html lang="zh-TW">
+  <head>
+  <meta charset="UTF-8">
+  <title>🖥️ 即時字幕共享視窗</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body { background: #04070e; color: #e2e8f0; font-family: system-ui, sans-serif; margin: 0; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+    .share-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; border-bottom: 1px solid #16223c; background: #0b1122; }
+    .share-cols { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #16223c; min-height: 0; }
+    .share-col { background: #04070e; display: flex; flex-direction: column; min-height: 0; }
+    .share-col-h { padding: 12px 24px; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #16223c; }
+    .share-col-b { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; justify-content: flex-end; }
+    .share-line { font-size: var(--sharesize, 32px); line-height: 1.5; font-weight: 500; }
+    .share-line.dim { opacity: 0.35; }
+    .sizer button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #22345e; background: #1a2340; color: #dbe6f5; font-size: 1rem; cursor: pointer; }
+  </style>
+  </head>
+  <body>
+    <div class="share-bar">
+      <span class="text-lg font-bold text-blue-200" id="title">會議即時翻譯</span>
+      <div class="flex items-center gap-4">
+        <div class="sizer flex gap-2 items-center">
+          <button onclick="changeSize(-4)">−</button>
+          <button onclick="changeSize(4)">＋</button>
+        </div>
+        <button onclick="window.close()" class="bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-500/40 font-bold px-3 py-1.5 rounded-lg text-sm transition">✕ 關閉視窗</button>
+      </div>
+    </div>
+    <div class="share-cols">
+      <div class="share-col">
+        <div class="share-col-h text-blue-300">🇹🇼 中文</div>
+        <div class="share-col-b" id="share-a"></div>
+      </div>
+      <div class="share-col">
+        <div class="share-col-h text-yellow-500">🇰🇷 한국어</div>
+        <div class="share-col-b" id="share-b"></div>
+      </div>
+    </div>
+
+  <script>
+    let size = 32;
+    const bc = new BroadcastChannel("${SHARE_CHANNEL_NAME}");
+
+    function changeSize(d) {
+      size = Math.max(18, Math.min(72, size + d));
+      document.body.style.setProperty('--sharesize', size + 'px');
+    }
+
+    function appendLine(boxId, text) {
+      if (!text) return;
+      const box = document.getElementById(boxId);
+      const d = document.createElement("div");
+      d.className = "share-line";
+      d.textContent = text;
+      box.appendChild(d);
+      while (box.children.length > 7) box.removeChild(box.firstChild);
+      for (let i = 0; i < box.children.length; i++) {
+        box.children[i].classList.toggle("dim", i < box.children.length - 2);
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+
+    bc.onmessage = function(ev) {
+      const data = ev.data;
+      if (!data) return;
+
+      if (data.type === 'NEW_TURN') {
+        appendLine('share-a', data.aText);
+        appendLine('share-b', data.bText);
+      } else if (data.type === 'INIT_SYNC') {
+        if (data.topic) document.getElementById('title').textContent = data.topic;
+        document.getElementById('share-a').innerHTML = '';
+        document.getElementById('share-b').innerHTML = '';
+        if (data.linesA) data.linesA.forEach(t => appendLine('share-a', t));
+        if (data.linesB) data.linesB.forEach(t => appendLine('share-b', t));
+      }
+    };
+  <\/script>
+  </body>
+  </html>`;
+  },
+
   shareSize: function(d){ this.shareSizePx = Math.max(16, Math.min(72, this.shareSizePx + d)); this.applyShareSize(); },
+
   applyShareSize: function(){ $("share").style.setProperty("--sharesize", this.shareSizePx + "px"); },
 
   tick: function(){
