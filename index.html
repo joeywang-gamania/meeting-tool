@@ -278,7 +278,7 @@ var CONFIG = {
   API_TOKEN: "ec8cc2d53bbf40948dab0e59d0c444ccde2982c0",
 
   MODEL: "gemini-3.1-flash-live-preview",
-  OUTPUT_MODE: "TEXT",
+  OUTPUT_MODE: "AUDIO",
   BACK_URL:    "https://script.google.com/a/macros/gamania.com/s/AKfycbzntJ33wOyOElIRPyUtPNnM8FEBFSYFhQF3rUTEIQ8v3EymO57fdJgtDoKFJIt9emw7/exec",
   GLOSSARY_URL:"https://docs.google.com/spreadsheets/d/1eC_TeMNOfSXbhMcvqBaxdXdekn0v2Zu7nklTShVn0bE/edit?gid=0#gid=0",
   WS_BASE: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained",
@@ -465,18 +465,16 @@ LiveSession.prototype.systemPrompt = function(){
 };
 
 LiveSession.prototype.setupMessage = function(){
-  var gen = { responseModalities: [CONFIG.OUTPUT_MODE], temperature: 0.1 };
+  var gen = { responseModalities: ["AUDIO"], temperature: 0.1 };
   var setup = {
     model: "models/" + CONFIG.MODEL,
     generationConfig: gen,
     systemInstruction: { parts: [{ text: this.systemPrompt() }] },
     inputAudioTranscription: {},          
+    outputAudioTranscription: {}, // 強制開啟語音轉文字追蹤，以取得文字譯文
     sessionResumption: this.handle ? { handle: this.handle } : {},
     contextWindowCompression: { slidingWindow: {} } 
   };
-  if(CONFIG.OUTPUT_MODE === "AUDIO"){
-    setup.outputAudioTranscription = {};  
-  }
   return { setup: setup };
 };
 
@@ -773,16 +771,17 @@ var App = {
   explainStartError: function(err){
     var name = err && err.name, msg = String((err && err.message) || err);
     if(msg === "NO_TAB_AUDIO"){
-      showMsg("err", "<b>沒有取得分頁音訊</b>　你選擇了畫面來源，但沒有勾選「同時分享分頁音訊」。" +
+      showMsg("err", "<b>沒有取得分頁音訊</b> 你選擇了畫面來源，但沒有勾選「同時分享分頁音訊」。" +
         "請再按一次開始收音，在選擇器裡選<b>「分頁」</b>並勾選左下角的音訊選項。" +
         "若你選的是「整個螢幕」，請注意 macOS 上的 Chrome 無法擷取系統音訊。", "m-fail");
     }else if(name === "NotAllowedError" || name === "PermissionDeniedError"){
-      showMsg("err", "<b>權限被拒絕</b>　請點網址列左側的鎖頭圖示，把麥克風設為「允許」，" +
-        "或在畫面分享的選擇器裡按「分享」而不是「取消」。", "m-fail");
+      showMsg("err", "<b>麥克風權限被拒絕或遭系統沙盒攔截</b><br>" +
+        "1. <b>請勿在 Apps Script 編輯器內建預覽視窗測試</b>！請複製正式部署 URL（.../exec）並於<b>全新瀏覽器分頁</b>開啟。<br>" +
+        "2. 若已在獨立分頁開啟，請點擊網址列左側「鎖頭圖示」，將「麥克風」權限調整為「允許」。", "m-fail");
     }else if(name === "NotFoundError"){
-      showMsg("err", "<b>找不到麥克風</b>　請確認麥克風已接上且未被其他程式佔用。", "m-fail");
+      showMsg("err", "<b>找不到麥克風</b> 請確認麥克風已接上且未被其他程式佔用。", "m-fail");
     }else{
-      showMsg("err", "<b>啟動失敗</b>　" + esc(msg) +
+      showMsg("err", "<b>啟動失敗</b> " + esc(msg) +
         "<br><span style='color:#c99'>若訊息提到後端或憑證，請先確認 Apps Script 已部署、" +
         "Script Properties 的 GEMINI_API_KEY 與 MEETING_API_TOKEN 都已設定。</span>", "m-fail");
     }
