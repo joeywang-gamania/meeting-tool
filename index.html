@@ -442,25 +442,24 @@ LiveSession.prototype.systemPrompt = function(){
   var mine = LANG_NAME[this.mineLang] || "繁體中文";
   var dst = LANG_NAME[this.dstLang] || "繁體中文";
   var lines = [];
-  lines.push("你是資深極速即時會議口譯員與聽寫員。你目前正處於一場嚴格僅限『繁體中文』、『韓文』與『英文』的三語會議中。");
+  lines.push("你是資深極速即時會議口譯員與聽寫員。你目前正處於一場嚴格僅限『繁體中文』、『韓文』與『英文』的三語即時串流會議中。");
+  lines.push("");
+  lines.push("【最高指令：全程不間斷翻譯與聽寫（絕不斷尾）】：");
+  lines.push("1. 【全量覆蓋】：講者無論連續說話多久，你必須從頭到尾完整輸出『所有對應的譯文與聽寫』，絕對禁止翻完前 1~2 句就中斷或放棄後半段！");
+  lines.push("2. 【微句輸出】：在保持全量覆蓋的前提下，每聽到 1 至 2 個短句（約 5~15 個字），必須『立刻吐出文字』，保持高頻即時字幕呈現。");
   lines.push("");
   lines.push("【最高語言邊界限制（嚴禁幻聽與異國語言）】：");
-  lines.push("1. 本會議『只允許輸出繁體中文、韓文與英文』。");
-  lines.push("2. 絕對嚴格禁止輸出任何其他國家語言（如西班牙文、法文、德文、日文、越南文等）！");
-  lines.push("3. 若環境存在噪音、咳嗽或低語導致音訊模糊，嚴禁猜測或幻聽成西班牙文等外語，請直接輸出空白。");
-  lines.push("4. 所有中文產出必須 100% 嚴格使用『繁體中文（台灣標準正體）』！嚴禁出現簡體字。");
+  lines.push("1. 語言範圍：本會議『只允許輸出繁體中文、韓文與英文』。");
+  lines.push("2. 嚴禁幻聽：絕對嚴格禁止輸出任何其他國家語言（如西班牙文、法文、德文、日文、越南文等）！若音訊模糊、咳嗽或為背景噪音，請直接輸出空白。");
+  lines.push("3. 繁體正體鎖定：所有中文產出必須 100% 嚴格使用『繁體中文（台灣標準正體）』！嚴禁出現任何簡體字。");
   lines.push("");
-  lines.push("【極速微句斷句（1~2句即時呈現）】：");
-  lines.push("1. 【微句切分】：講者每講完 1 至 2 個短句（約 5~15 個字），必須『立刻輸出』並斷句！");
-  lines.push("2. 絕對禁止囤積超過 2 句以上才一次性吐出，必須保持極高的即時字幕呈現頻率。");
-  lines.push("");
-  lines.push("【翻譯與聽寫分流】：");
-  lines.push("1. 聽到繁體中文或英文：直接進行極速語音轉文字（聽寫原文）。");
-  lines.push("2. 聽到韓文：立即翻譯成精練的繁體中文。");
-  lines.push("3. 只輸出譯文/聽寫結果本身，不要加任何前綴（如「翻譯：」）、不要說明你在做什麼。");
+  lines.push("【翻譯與聽寫分流法則】：");
+  lines.push("1. 聽到『韓文』：必須立即且全程翻譯成精練通順的『繁體中文』。");
+  lines.push("2. 聽到『繁體中文』或『英文』：直接進行極速語音轉文字（聽寫原文）。");
+  lines.push("3. 淨化輸出：只輸出聽寫/譯文結果本身，嚴禁加任何前綴（如「翻譯：」、「原文：」）、引號或說明文字。");
   if(this.glossary){
     lines.push("");
-    lines.push("【術語對照表】：");
+    lines.push("【術語對照表（強制遵循）】：");
     lines.push(this.glossary);
   }
   return lines.join("\n");
@@ -540,11 +539,9 @@ LiveSession.prototype.handleServer = function(m){
   if(sc.inputTranscription && sc.inputTranscription.text){
     this.cur.orig += sc.inputTranscription.text;
   }
-  if(CONFIG.OUTPUT_MODE === "AUDIO"){
-    if(sc.outputTranscription && sc.outputTranscription.text){
-      this.cur.tran += sc.outputTranscription.text;
-    }
-  }else if(sc.modelTurn && sc.modelTurn.parts){
+  if(sc.outputTranscription && sc.outputTranscription.text){
+    this.cur.tran += sc.outputTranscription.text;
+  } else if(sc.modelTurn && sc.modelTurn.parts){
     sc.modelTurn.parts.forEach(function(p){
       if(p.text) self.cur.tran += p.text;
     });
