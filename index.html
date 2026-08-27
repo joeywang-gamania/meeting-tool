@@ -438,27 +438,26 @@ function LiveSession(opt){
 }
 
 LiveSession.prototype.systemPrompt = function(){
-  var dst = LANG_NAME[this.dstLang] || this.dstLang;
+  var mine = LANG_NAME[this.mineLang] || "繁體中文";
+  var dst = LANG_NAME[this.dstLang] || "繁體中文";
   var lines = [];
-  if(this.srcLang){
-    lines.push("你是專業會議口譯。你會持續收到「"+(LANG_NAME[this.srcLang]||this.srcLang)+"」的會議語音。");
-    lines.push("你的唯一工作：把聽到的內容翻譯成「"+dst+"」。");
-  }else{
-    var mine = LANG_NAME[this.mineLang] || "繁體中文";
-    lines.push("你是專業會議口譯。你會收到一場雙語會議的語音，說話者可能使用「"+mine+"」或「"+dst+"」。");
-    lines.push("你的唯一工作：先判斷這一段是哪一種語言，然後翻譯成另一種。");
-    lines.push("聽到「"+mine+"」就翻成「"+dst+"」；聽到「"+dst+"」就翻成「"+mine+"」。");
-  }
+
+  lines.push("你是資深極速即時會議口譯與聽寫員。你將持續收到即時會議語音串流。");
   lines.push("");
-  lines.push("嚴格規則：");
-  lines.push("1. 只輸出譯文本身。不要輸出原文、不要加引號、不要加「翻譯：」之類的前綴、不要解釋、不要說明你在做什麼。");
-  lines.push("2. 英文專有名詞、產品代號、系統名稱、縮寫（如 MAU、ARPPU、Ontime、GM）一律保留原文，不要翻譯。");
-  lines.push("3. 這是會議即時字幕，請用精簡、書面、可直接投影的句子。不要加語助詞。");
-  lines.push("4. 若這一段只有靜音、雜音、咳嗽、或無意義的語助詞，請輸出空白，不要編造內容。");
-  lines.push("5. 逐句翻譯，不要總結、不要合併多句、不要補充會議裡沒說過的資訊。");
+  lines.push("【核心工作任務與分流邏輯】：");
+  lines.push("1. 【極速輸出】：收到語音後，請『立即、即時』輸出文字內容，絕不要等待講者停頓或長句結束。");
+  lines.push("2. 【中文/英文】：若聽到的是『繁體中文』或『英文』，請直接進行極速語音轉文字（聽寫），精準還原原文。");
+  lines.push("3. 【外語翻譯】：若聽到的是『韓文』、『日文』或其他外語，請『立即翻譯』成精練的【繁體中文】。");
+  lines.push("");
+  lines.push("【字體與格式嚴格限制】：");
+  lines.push("1. 必須 100% 嚴格使用『繁體中文（台灣正體）』！絕對禁止出現任何簡體字（如：国、国、译、写、这等）！");
+  lines.push("2. 只輸出聽寫/譯文結果本身。嚴禁加上任何前綴（如：不要寫「翻譯：」、「原文：」）、不要加引號，亦不要說明你在做什麼。");
+  lines.push("3. 英文專有名詞、產品代號、縮寫（如 MAU、ARPPU、Ontime、GM）一律保留原文，勿翻譯。");
+  lines.push("4. 若這一段只有靜音、雜音、咳嗽或無意義語助詞，請輸出空白，勿編造內容。");
+
   if(this.glossary){
     lines.push("");
-    lines.push("術語對照表（務必遵循，格式為「原文 = 譯法」）：");
+    lines.push("【術語對照表（必須強制遵循）】：");
     lines.push(this.glossary);
   }
   return lines.join("\n");
@@ -569,7 +568,7 @@ LiveSession.prototype.snapshot = function(){
 LiveSession.prototype.scheduleReconnect = function(ev){
   var self = this;
   this.retry++;
-  var fatal = ev && (ev.code === 1008 || ev.code === 1002 || ev.code === 1003);
+  var fatal = ev && (ev.code === 1002 || ev.code === 1003);
   if(fatal || this.retry > 12){
     this.onState("fatal", "無法連線（" + (ev ? ev.code : "?") + "）");
     App.onSessionFatal(this, ev);
@@ -582,7 +581,8 @@ LiveSession.prototype.scheduleReconnect = function(ev){
       var tok = await App.tokenFor(self.key, true);
       await self.connect(tok);
     }catch(e){
-      self.onState("down", "重連失敗，再試…");
+      console.warn("[Live:"+self.key+"] 重連取得 Token 失敗:", e);
+      self.onState("down", "重連中，嘗試重新取得憑證…");
       self.scheduleReconnect(null);
     }
   }, wait);
@@ -902,19 +902,42 @@ var App = {
     if(ph) ph.remove();
     var interimId = "interim-" + snap.key;
     var old = $(interimId);
-    if(old) old.remove();
     if(!isFinal){
       if(!snap.orig && !snap.tran) return;
-      $("feed").appendChild(this.turnEl(snap, true, interimId));
+      if (old) {
+        this.updateTurnEl(old, snap, true);
+      } else {
+        $("feed").appendChild(this.turnEl(snap, true, interimId));
+      }
       this.scrollFeed();
       return;
     }
+    if(old) old.remove();
     this.turns.push(snap);
     $("feed").appendChild(this.turnEl(snap, false, null));
     this.scrollFeed();
     $("st-turns").textContent = String(this.turns.length);
     this.pushShare(snap);
     this.persist();
+  },
+
+  updateTurnEl: function(el, snap, interim) {
+    var mine = (snap.key !== "theirs");
+    var who, flag;
+    if(this.mode === "online"){
+      who  = mine ? "我方" : "韓方";
+      flag = LANG_FLAG[mine ? this.mineLang : this.theirsLang] || "";
+    }else{
+      who = "會議室"; flag = "🎙️";
+    }
+    var h = '<div class="turn-h"><span class="who">' + flag + " " + esc(who) +
+            '</span><span class="ts">' + esc(snap.at) + '</span>' +
+            (interim ? '<span class="ts text-yellow-400 font-bold animate-pulse">辨識中…</span>' : '') + '</div>';
+    if(snap.orig) h += '<div class="orig">' + esc(snap.orig) + '</div>';
+    if(snap.tran) h += '<div class="tran">' + esc(snap.tran) + '</div>';
+    if (el.innerHTML !== h) {
+      el.innerHTML = h;
+    }
   },
 
   turnEl: function(snap, interim, id){
