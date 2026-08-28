@@ -257,11 +257,11 @@ input[type=text],select{
   </div>
   <div class="share-cols">
     <div class="share-col">
-      <div class="share-col-h" style="color:#9dc6ee">🇹🇼 中文</div>
+      <div class="share-col-h" style="color:#e8c489">🇰🇷 한국어</div>
       <div class="share-col-b" id="share-a"></div>
     </div>
     <div class="share-col">
-      <div class="share-col-h" style="color:#e8c489">🇰🇷 한국어</div>
+      <div class="share-col-h" style="color:#9dc6ee">🇹🇼 繁體中文</div>
       <div class="share-col-b" id="share-b"></div>
     </div>
   </div>
@@ -1025,29 +1025,25 @@ var App = {
 
   pushShare: function(snap){
     var isForeign = this.isForeignSpeaker(snap);
-    var aText, bText;
-
+    var aText, bText; // aText = 左欄 (韓文), bText = 右欄 (中文)
     if (isForeign) {
-      aText = snap.tran || snap.orig;
-      bText = snap.orig;
-    } else {
       aText = snap.orig;
       bText = snap.tran || snap.orig;
+    } else {
+      aText = snap.tran || snap.orig;
+      bText = snap.orig;
     }
-
     this.appendShare("share-a", aText);
     this.appendShare("share-b", bText);
-
     var self = this;
     if (this._pushTimer) clearTimeout(this._pushTimer);
     this._pushTimer = setTimeout(function(){
       var linesA = [], linesB = [];
       self.turns.forEach(function(t){
         var foreign = self.isForeignSpeaker(t);
-        linesA.push(foreign ? (t.tran || t.orig) : t.orig);
-        linesB.push(foreign ? t.orig : (t.tran || t.orig));
+        linesA.push(foreign ? t.orig : (t.tran || t.orig));
+        linesB.push(foreign ? (t.tran || t.orig) : t.orig);
       });
-
       callGas({
         action: 'pushShareState',
         sessionId: self.sessionId,
@@ -1104,12 +1100,13 @@ var App = {
           <div class="text-xs text-emerald-400 font-mono animate-pulse">● Live 聯播中</div>
         </div>
         <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-1 bg-slate-800">
+          <!-- 左欄：韓文 (黃字) -->
           <div class="bg-black p-6 overflow-y-auto flex flex-col justify-end" id="box-a"></div>
+          <!-- 右欄：中文 (藍字) -->
           <div class="bg-black p-6 overflow-y-auto flex flex-col justify-end" id="box-b"></div>
         </div>
       </div>
     `;
-
     var poll = function(){
       callGas({ action: 'getShareState', sessionId: sessionId }, { tries: 1 })
         .then(function(res){
@@ -1117,16 +1114,15 @@ var App = {
             if (res.data.topic) $("viewer-topic").textContent = "🎙️ " + res.data.topic;
             var boxA = $("box-a"), boxB = $("box-b");
             boxA.innerHTML = ""; boxB.innerHTML = "";
-            
             (res.data.linesA || []).forEach(function(txt){
               var d = document.createElement("div");
-              d.className = "text-2xl font-medium my-2 text-blue-200 leading-relaxed";
+              d.className = "text-2xl font-medium my-2 text-yellow-300 leading-relaxed";
               d.textContent = txt;
               boxA.appendChild(d);
             });
             (res.data.linesB || []).forEach(function(txt){
               var d = document.createElement("div");
-              d.className = "text-2xl font-medium my-2 text-yellow-300 leading-relaxed";
+              d.className = "text-2xl font-medium my-2 text-blue-200 leading-relaxed";
               d.textContent = txt;
               boxB.appendChild(d);
             });
@@ -1136,7 +1132,6 @@ var App = {
         })
         .catch(function(e){ console.warn("輪詢廣播失敗:", e); });
     };
-
     poll();
     setInterval(poll, 1500);
   },
