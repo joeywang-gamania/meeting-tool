@@ -458,16 +458,15 @@ LiveSession.prototype.systemPrompt = function(){
   var mine = LANG_NAME[this.mineLang] || "繁體中文";
   var dst = LANG_NAME[this.dstLang] || "繁體中文";
   var lines = [];
-  lines.push("你是資深極速即時會議口譯員與聽寫員。你目前正處於一場嚴格僅限『繁體中文』、『韓文』與『英文』的三語即時串流會議中。");
+  lines.push("你是資深極速即時會議口譯員與聽寫員。你目前正處於一場嚴格僅限『繁體中文』、『韓文』與『英文』的三語即時串流會議中。你的唯一使命：將輸入的語音『持續且無間斷』地轉換為文字與翻譯。");
   lines.push("");
-  lines.push("【最高指令：全程不間斷翻譯與聽寫（絕不斷尾）】：");
-  lines.push("1. 【全量覆蓋】：講者無論連續說話多久，你必須從頭到尾完整輸出『所有對應的譯文與聽寫』，絕對禁止翻完前 1~2 句就中斷或放棄後半段！");
-  lines.push("2. 【微句輸出】：在保持全量覆蓋的前提下，每聽到 1 至 2 個短句（約 5~15 個字），必須『立刻吐出文字』，保持高頻即時字幕呈現。");
+  lines.push("【最高指令：極速微片段翻譯原則（絕不積壓、絕不斷尾）】：");
+  lines.push("1. 【微段即時輸出】：講者發言時，切勿等待長句或整段話講完！每聽到 5 至 10 個字或一個短子句，必須『立刻輸出對應之譯文與聽寫』。");
+  lines.push("2. 【全程覆蓋】：無論講者連續說話多久，你必須逐字逐句隨說隨翻，絕對禁止翻完前兩句就停止！");
   lines.push("");
   lines.push("【最高語言邊界限制（嚴禁幻聽與異國語言）】：");
-  lines.push("1. 語言範圍：本會議『只允許輸出繁體中文、韓文與英文』。");
-  lines.push("2. 嚴禁幻聽：絕對嚴格禁止輸出任何其他國家語言（如西班牙文、法文、德文、日文、越南文等）！若音訊模糊、咳嗽或為背景噪音，請直接輸出空白。");
-  lines.push("3. 繁體正體鎖定：所有中文產出必須 100% 嚴格使用『繁體中文（台灣標準正體）』！嚴禁出現任何簡體字。");
+  lines.push("1. 語言範圍：本會議『只允許輸出繁體中文、韓文與英文』，絕對嚴格禁止出現簡體字或任何其他國家語言（如西班牙文、法文等）。");
+  lines.push("2. 繁體正體鎖定：所有中文產出必須 100% 嚴格使用『繁體中文（台灣標準正體）』！嚴禁出現任何簡體字。");
   lines.push("");
   lines.push("【翻譯與聽寫分流法則】：");
   lines.push("1. 聽到『韓文』：必須立即且全程翻譯成精練通順的『繁體中文』。");
@@ -552,23 +551,28 @@ LiveSession.prototype.handleServer = function(m){
   var sc = m.serverContent;
   if(!sc) return;
   if(!this.cur.at) this.cur.at = clockNow();
-  if(sc.inputTranscription && sc.inputTranscription.text){
-    this.cur.orig += sc.inputTranscription.text;
-  }
+  var newOrig = (sc.inputTranscription && sc.inputTranscription.text) ? sc.inputTranscription.text : "";
+  var newTran = "";
   if(sc.outputTranscription && sc.outputTranscription.text){
-    this.cur.tran += sc.outputTranscription.text;
+    newTran = sc.outputTranscription.text;
   } else if(sc.modelTurn && sc.modelTurn.parts){
     sc.modelTurn.parts.forEach(function(p){
-      if(p.text) self.cur.tran += p.text;
+      if(p.text) newTran += p.text;
     });
   }
-  if(sc.inputTranscription || sc.outputTranscription || sc.modelTurn){
-    this.onTurn(this.snapshot(), false);
-  }
-  if(sc.turnComplete){
+  this.cur.orig += newOrig;
+  this.cur.tran += newTran;
+  var hasPunctuation = /[。！？\n.?!]/.test(newOrig || newTran);
+  var isOverLength = (this.cur.orig.length > 45 || this.cur.tran.length > 55);
+  var shouldSplit = sc.turnComplete || (hasPunctuation && this.cur.orig.length > 12) || isOverLength;
+  if (shouldSplit) {
     var snap = this.snapshot();
     this.cur = { orig:"", tran:"", at:null };
-    if(snap.orig.trim() || snap.tran.trim()) this.onTurn(snap, true);
+    if (snap.orig.trim() || snap.tran.trim()) {
+      this.onTurn(snap, true); 
+    }
+  } else if (newOrig || newTran) {
+    this.onTurn(this.snapshot(), false); 
   }
 };
 
